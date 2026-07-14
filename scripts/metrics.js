@@ -226,11 +226,22 @@ new Chart(document.getElementById('chart'), {
 function runMetrics(input, output) {
   console.log("Analyzing before/after metrics...");
   const before = analyze(input);
-  const after = analyze(output);
+
+  // When output is a directory (--split mode), analyze main.js inside it
+  let afterPath = output;
+  if (fs.existsSync(output) && fs.statSync(output).isDirectory()) {
+    afterPath = require("path").join(output, "main.js");
+    if (!fs.existsSync(afterPath)) {
+      console.log("  Metrics skipped: no main.js in output directory");
+      return null;
+    }
+  }
+  const after = analyze(afterPath);
+
   const html = generateReport(before, after);
   const outPath = output.endsWith(".js")
     ? output.replace(/\.js$/, ".metrics.html")
-    : output + "/metrics.html";
+    : output.replace(/\/$/, "") + "/metrics.html";
   fs.writeFileSync(outPath, html, "utf-8");
   console.log(`  Report: ${outPath}`);
   return { before, after };
