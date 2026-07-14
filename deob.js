@@ -199,7 +199,8 @@ if (args[0] === "init") {
 
 if (args.includes("--help") || args.includes("-h")) {
   console.log("deob — universal JS deobfuscation pipeline\n");
-  console.log("Usage: deob <input> [output-dir] [options]");
+  console.log("Usage: deob                            # auto-detect deob.config.js");
+  console.log("       deob <input> [output-dir] [options]");
   console.log("       deob --config <path>");
   console.log("       deob init [--force]\n");
   console.log("Commands:");
@@ -228,21 +229,27 @@ if (args.includes("--help") || args.includes("-h")) {
 
 // ── run ──────────────────────────────────────────────────────────────
 
-if (hasConfig) {
-  const cfg = parseConfig(args[configIdx + 1]);
-
-  console.log(`Config: ${path.resolve(args[configIdx + 1])}`);
-
+function runWithConfig(configPath) {
+  const cfg = parseConfig(configPath);
+  if (configPath !== "deob.config.js") {
+    console.log(`Config: ${path.resolve(configPath)}`);
+  }
   for (const inputPath of cfg.input) {
     const isDir = fs.existsSync(inputPath) && fs.statSync(inputPath).isDirectory();
     const outputDir = cfg.output || defaultOutDir(inputPath);
-
     if (isDir) {
       processDirectory(inputPath, outputDir, cfg);
     } else {
       processSingleFile(inputPath, outputDir, cfg);
     }
   }
+}
+
+if (hasConfig) {
+  runWithConfig(args[configIdx + 1]);
+} else if (!hasConfig && args.length === 0 && fs.existsSync("deob.config.js")) {
+  // No arguments, auto-detect deob.config.js in cwd
+  runWithConfig("deob.config.js");
 } else {
   // CLI mode — parse flags and positional args
   const flags = new Set(args.filter((a) => a.startsWith("--")));
