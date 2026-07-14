@@ -3,10 +3,22 @@ const { parser, t, fs, path } = require("./config");
 
 function analyzeStructure(filepath) {
   const code = fs.readFileSync(filepath, "utf-8");
-  const ast = parser.parse(code, {
-    sourceType: "script", allowReturnOutsideFunction: true,
-    allowUndeclaredExports: true, errorRecovery: true,
-  });
+  let ast;
+  try {
+    ast = parser.parse(code, {
+      sourceType: "script", allowReturnOutsideFunction: true,
+      allowUndeclaredExports: true, errorRecovery: true,
+    });
+  } catch (e) {
+    // Fallback for files with sloppy-mode reserved words
+    return {
+      file: path.basename(filepath),
+      error: "Parse failed (sloppy-mode reserved words like let/if as variable names)",
+      summary: { totalFunctions: 0, subFunctions: 0, originalFunctions: 0, byType: {}, maxDepth: 0 },
+      naming: {},
+      functions: [],
+    };
+  }
 
   const fns = []; // {name, lines, params, calls:[], calledBy:[], comment}
   const nameMap = new Map();
@@ -100,6 +112,7 @@ function analyzeStructure(filepath) {
 }
 
 function generateMarkdown(report) {
+  if (report.error) return `# Structure Report · ${report.file}\n\n> **${report.error}**\n`;
   const { file, summary, naming, functions } = report;
   const typeTable = Object.entries(summary.byType).map(([k, v]) => `| ${k} | ${v} |`).join("\n");
 
@@ -173,7 +186,13 @@ function generateJSON(report) {
 }
 
 function runStructure(input, outputDir, format) {
-  const report = analyzeStructure(input);
+  // Analyze the OUTPUT file (deobfuscated code), not the original input
+  const afterPath = path.join(outputDir, "main.js");
+  if (!fs.existsSync(afterPath)) {
+    console.log("  Structure report skipped: no main.js in output directory");
+    return null;
+  }
+  const report = analyzeStructure(afterPath);
   const ext = format === "md" ? ".md" : ".json";
   const outPath = path.join(outputDir, "structure" + ext);
   const content = format === "md" ? generateMarkdown(report) : generateJSON(report);
