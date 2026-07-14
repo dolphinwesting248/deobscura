@@ -10,20 +10,32 @@ Zero configuration. Works on any obfuscated JavaScript: **obfuscator.io**, **JSV
 npm install
 npm link
 
-# Default: output to main.deob/
-deob main.js
-
-# Split into per-function files
-deob main.js --split
-
-# All reports
-deob main.js --split --metrics --md --json
-# → main.deob/
-#   main.js          ← deobfuscated code
-#   metrics.html     ← readability report
-#   structure.md     ← naming rules + call graph
-#   structure.json   ← machine-readable
+deob main.js                         # → main.deob/main.js
+deob main.js --split                 # → main.deob/ (per-function files)
+deob main.js --metrics               # → main.deob/ + metrics.html
+deob main.js --md --json             # → main.deob/ + structure reports
+deob main.js --split --metrics --md --json  # everything
 ```
+
+All output goes into a directory:
+
+```
+main.deob/
+├── main.js           ← deobfuscated code
+├── metrics.html      ← readability report (--metrics)
+├── structure.md      ← naming rules + call graph (--md)
+└── structure.json    ← machine-readable (--json)
+```
+
+## CLI Options
+
+| Flag | Output | Description |
+|------|--------|-------------|
+| (default) | `main.js` | Single deobfuscated file |
+| `--split` | per-function files | Each `_sub_` function in its own file, grouped by parent |
+| `--metrics` | `metrics.html` | Before/after readability comparison with Chart.js |
+| `--md` | `structure.md` | Function inventory, call graph, naming convention docs |
+| `--json` | `structure.json` | Same as `--md` in machine-readable JSON |
 
 ## Pipeline (14 passes)
 
@@ -33,18 +45,18 @@ deob main.js --split --metrics --md --json
 | 2 | `wrapper` | Extract top-level IIFEs to named wrappers |
 | 3 | `hoist` | Move var/let/const/function to top of every scope |
 | 4 | `extract-inline` | Lift embedded function expressions out of return/assignment |
-| 5 | `simplify` | **Combined**: fold + boolean + strings + ast-normalize in one walk |
+| 5 | `simplify` | Combined: fold + boolean + strings + ast-normalize in one walk |
 | 6 | `expand-seq` | Break comma chains into independent statements |
 | 7 | `dead-code` | Remove if(false), unreachable code after return |
-| 8 | `inline-props` | Replace config.PROP with literal values (45K+ inlined) |
+| 8 | `inline-props` | Replace config.PROP with literal values |
 | 9 | `unused` | Remove helper functions never referenced |
 | 10 | `conditions` | Simplify a?true:false→!!a, if-return patterns |
 | 11 | `wrappers` | Inline pure wrapper functions |
 | 12 | `call-tree` | Topological sort: callees before callers |
 | 13 | `single-caller` | Inline functions called from exactly one place |
-| 14 | `normalize` | Statement-list: multi-decl split, sequence unwrap, for(;;)→while(true) |
+| 14 | `normalize` | multi-decl split, sequence unwrap, for(;;)→while(true) |
 
-## Output
+## Output Example
 
 ```javascript
 // Before: obfuscated
@@ -60,12 +72,23 @@ function a0_0x5465(_0x147aca, _0x1c469e) {
 }
 
 // Original lines 1-170
-function _sub_return_fn1(_0x4d3a42, _0x55eff5, _0x477d9d, _0x147aca, a0_0x5465, _0x52d22c) {
+function _sub_return_fn1(_0x4d3a42, _0x55eff5, _0x477d9d, _0x147aca, a0_0x5465) {
   _0x4d3a42 = _0x4d3a42 - 295;
   let _0x5711d9 = _0x477d9d[_0x4d3a42];
   // ...
 }
 ```
+
+## Naming Convention
+
+All extracted sub-functions follow: `_sub_<parent>_<seq>_<description>`
+
+| Component | Meaning |
+|-----------|---------|
+| `_sub_` | Prefix for extracted sub-functions |
+| `<parent>` | Parent function name, method name, or `lnXXXX` for anonymous |
+| `<seq>` | Two-digit extraction order |
+| `<description>` | `if`, `else`, `try`, `catch`, `init_vars`, `iife_body`... |
 
 ## API
 
@@ -83,10 +106,12 @@ scripts/
 ├── extract.js        ← Splitting rules (IIFE, try-catch, if-else, …)
 ├── traverse.js       ← Innermost-first function collection
 ├── passes.js         ← 14 post-processing passes
+├── metrics.js        ← Readability analysis + HTML report
+├── structure.js      ← Function inventory + call graph reports
 ├── ast-utils.js      ← Generic AST walker, detectors, clone
 ├── scope.js          ← Variable scope & external reference analysis
 ├── emit.js           ← Sub-function declaration builder
-├── naming.js         ← _sub_PARENT_SEQ_desc naming convention
+├── naming.js         ← Naming convention helpers
 ├── wrapper.js        ← Top-level IIFE extraction
 ├── config.js         ← Parser, generator, globals
 └── index.js          ← Public API exports
@@ -96,10 +121,11 @@ scripts/
 
 1. Write your function in `passes.js`
 2. Require it in `pipeline.js`
-3. Add a `console.log("Step N: …")` + call in `main()`
+3. Add a step in `main()`:
 
 ```javascript
 // passes.js
+const { walkAST } = require("./ast-utils");
 function myPass(ast) {
   let count = 0;
   walkAST(ast, (node) => { /* transform */ count++; });
