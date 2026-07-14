@@ -163,8 +163,6 @@ function writeSingleOutput(ast, output, code) {
   console.log("Writing output...");
   fs.writeFileSync(mainFile, generated, "utf-8");
 
-  formatFile(mainFile);
-
   const finalSize = fs.statSync(mainFile).size;
   const ratio = ((finalSize / code.length) * 100).toFixed(1);
   console.log(`Done! Output: ${(finalSize / 1024 / 1024).toFixed(2)} MB (${ratio}% of original)`);
@@ -264,9 +262,6 @@ function writeSplitOutput(ast, output, code) {
   const rootEntries = [...groups.keys()].map((g) => `  "${g}": require("./${g}"),`).join("\n");
   fs.writeFileSync(path.join(outDir, "index.js"), `// Assembly\nmodule.exports = {\n${rootEntries}\n};\n`, "utf-8");
 
-  // --- Phase 3: format entire directory once ---
-  console.log("  Formatting...");
-  formatDirectory(outDir);
 
   console.log(`  Wrote ${totalFiles} files to ${outDir}/ (${groups.size} groups)`);
 }
@@ -283,22 +278,6 @@ function walkCalls(node, collected) {
     if (Array.isArray(val)) { for (const v of val) walkCalls(v, collected); }
     else if (val && typeof val.type === "string") walkCalls(val, collected);
   }
-}
-
-function formatFile(filepath) {
-  // Used only for single-file output
-  const { execSync } = require("child_process");
-  try {
-    execSync(`npx --yes prettier --write "${filepath}"`, { stdio: "pipe", timeout: 120000 });
-  } catch (_) { /* prettier not available */ }
-}
-
-function formatDirectory(dir) {
-  // Format an entire directory once instead of per-file (245 process spawns → 1)
-  const { execSync } = require("child_process");
-  try {
-    execSync(`npx --yes prettier --write "${dir}/**/*.js"`, { stdio: "pipe", timeout: 120000 });
-  } catch (_) { /* prettier not available */ }
 }
 
 module.exports = { main };
