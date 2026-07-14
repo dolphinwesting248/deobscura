@@ -3,37 +3,43 @@ const { parser, t, fs, path } = require("./config");
 
 function analyze(filepath) {
   const code = fs.readFileSync(filepath, "utf-8");
-  const ast = parser.parse(code, { sourceType: "script", errorRecovery: true });
+  let ast;
+  try {
+    ast = parser.parse(code, {
+      sourceType: "script",
+      allowReturnOutsideFunction: true,
+      allowUndeclaredExports: true,
+      errorRecovery: true,
+    });
+  } catch (e) {
+    // Fallback: regex-based analysis for files with sloppy-mode reserved words (let/if as variable names)
+    return analyzeFallback(filepath, code);
+  }
 
-  const before = {
-    file: filepath,
-    size: code.length,
-    lines: code.split("\n").length,
-    fnCount: 0,
-    maxDepth: 0,
-    maxBodyLen: 0,
-    avgBodyLen: 0,
-    avgParams: 0,
-    fnWithComments: 0,
-    totalBodyLen: 0,
-    totalParams: 0,
-  };
+  const result = walkAST(ast);
+  result.file = filepath;
+  result.size = code.length;
+  result.lines = code.split("\n").length;
+  result.sizeMB = (result.size / 1024 / 1024);
+  return result;
+}
+
+function walkAST(ast) {
+  const m = { fnCount: 0, maxDepth: 0, maxBodyLen: 0, totalBodyLen: 0, totalParams: 0, fnWithComments: 0 };
 
   function walk(node, depth) {
     if (!node || typeof node !== "object") return;
     if (
-      t.isFunctionDeclaration(node) ||
-      t.isFunctionExpression(node) ||
-      t.isArrowFunctionExpression(node) ||
-      t.isObjectMethod(node)
+      t.isFunctionDeclaration(node) || t.isFunctionExpression(node) ||
+      t.isArrowFunctionExpression(node) || t.isObjectMethod(node)
     ) {
-      before.fnCount++;
+      m.fnCount++;
       const bl = t.isBlockStatement(node.body) ? node.body.body.length : 1;
-      before.totalBodyLen += bl;
-      before.totalParams += node.params.length;
-      if (bl > before.maxBodyLen) before.maxBodyLen = bl;
-      if (depth > before.maxDepth) before.maxDepth = depth;
-      if (node.leadingComments && node.leadingComments.length > 0) before.fnWithComments++;
+      m.totalBodyLen += bl;
+      m.totalParams += node.params.length;
+      if (bl > m.maxBodyLen) m.maxBodyLen = bl;
+      if (depth > m.maxDepth) m.maxDepth = depth;
+      if (node.leadingComments && node.leadingComments.length > 0) m.fnWithComments++;
     }
     for (const k of Object.keys(node)) {
       if (k === "start" || k === "end" || k === "loc" ||
@@ -44,11 +50,40 @@ function analyze(filepath) {
     }
   }
   walk(ast, 0);
+  m.avgBodyLen = (m.totalBodyLen / Math.max(1, m.fnCount));
+  m.avgParams = (m.totalParams / Math.max(1, m.fnCount));
+  return m;
+}
 
-  before.avgBodyLen = (before.totalBodyLen / Math.max(1, before.fnCount));
-  before.avgParams = (before.totalParams / Math.max(1, before.fnCount));
-  before.sizeMB = (before.size / 1024 / 1024);
-  return before;
+function analyzeFallback(filepath, code) {
+  // Regex-based analysis for files that Babel can't parse (sloppy-mode reserved words)
+  const fnMatches = code.match(/\bfunction\s/g) || [];
+  const commentMatches = code.match(/\/\/\s*Original lines/g) || [];
+  const lines = code.split("\n");
+
+  // Estimate nesting depth from indentation
+  let maxIndent = 0;
+  for (const line of lines) {
+    const indent = line.match(/^(\s*)/)[1].length;
+    if (indent > maxIndent) maxIndent = Math.min(indent, 200);
+  }
+  const maxDepth = Math.round(maxIndent / 2);
+
+  return {
+    file: filepath,
+    size: code.length,
+    sizeMB: code.length / 1024 / 1024,
+    lines: lines.length,
+    fnCount: fnMatches.length,
+    maxDepth: maxDepth,
+    maxBodyLen: 0,
+    avgBodyLen: 0,
+    avgParams: 0,
+    fnWithComments: commentMatches.length,
+    totalBodyLen: 0,
+    totalParams: 0,
+    fallback: true,
+  };
 }
 
 function generateReport(before, after) {
@@ -124,7 +159,7 @@ function generateReport(before, after) {
 </head>
 <body>
 <h1>Deobfuscation Metrics Report</h1>
-<div class="sub">${before.file} → ${after.file}</div>
+<div class="sub">${before.file} → ${after.file}${before.fallback ? " (metrics are regex-based estimates)" : ""}</div>
 
 <div class="summary">
   <div class="card">
