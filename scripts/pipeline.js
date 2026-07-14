@@ -185,9 +185,14 @@ function writeSplitOutput(ast, output, code) {
 
   // --- Phase 1: generate ALL function codes at once ---
   // Build one big AST with all functions, generate once, then split by regex
-  const allFnAst = { ...ast, program: { ...ast.program, body: otherStmts } };
+  // Write _all.js (full combined code for reports to analyze)
+  fs.writeFileSync(path.join(outDir, "_all.js"), generate(ast, {
+    retainLines: false, retainFunctionParens: false,
+    comments: true, compact: false,
+  }).code, "utf-8");
+
   // Generate each function separately but without prettier — batch format at end
-  const generatedFns = new Map(); // stmt -> code string
+  const generatedFns = new Map();
 
   // Write main.js (original functions)
   const mainAst = { ...ast, program: { ...ast.program, body: otherStmts } };

@@ -186,10 +186,12 @@ function generateJSON(report) {
 }
 
 function runStructure(input, outputDir, format) {
-  // Analyze the OUTPUT file (deobfuscated code), not the original input
-  const afterPath = path.join(outputDir, "main.js");
+  // Analyze the full combined output (_all.js in split mode, main.js otherwise)
+  const allPath = path.join(outputDir, "_all.js");
+  const mainPath = path.join(outputDir, "main.js");
+  const afterPath = fs.existsSync(allPath) ? allPath : mainPath;
   if (!fs.existsSync(afterPath)) {
-    console.log("  Structure report skipped: no main.js in output directory");
+    console.log("  Structure report skipped: no output file found");
     return null;
   }
   const report = analyzeStructure(afterPath);

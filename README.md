@@ -45,7 +45,7 @@ main.deob/
 | 2 | `wrapper` | Extract top-level IIFEs to named wrappers |
 | 3 | `hoist` | Move var/let/const/function to top of every scope |
 | 4 | `extract-inline` | Lift embedded function expressions out of return/assignment |
-| 5 | `simplify` | Combined: fold + boolean + strings + ast-normalize in one walk |
+| 5 | `simplify` | Combine fold + boolean + strings + ast-normalize in one walk |
 | 6 | `expand-seq` | Break comma chains into independent statements |
 | 7 | `dead-code` | Remove if(false), unreachable code after return |
 | 8 | `inline-props` | Replace config.PROP with literal values |
