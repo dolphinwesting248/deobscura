@@ -128,43 +128,86 @@ WHERE kind = 'calls' GROUP BY target ORDER BY c DESC LIMIT 10;
 | 16 | `normalize` | Multi-decl split, chained assignment split, for(;;)→while(true) |
 | 17 | `extract-inline` | Second pass — catch patterns exposed by restructuring |
 
-## Output Example
+## Output Examples
 
-**Input** — typical obfuscated patterns: function reassignment via comma operator, ternary-as-statement, config object:
+All examples verified against actual pipeline output.
+
+### Comma operator expansion + inline function extraction
 
 ```javascript
+// Input
 function a0_0x5465(_0x147aca,_0x1c469e){var _0x477d9d=a0_0x1cb6();return (a0_0x5465=function(_0x593f2d,_0x4d5e1e){var _0x2a8c=_0x477d9d[_0x593f2d];return _0x2a8c?_0x2a8c(_0x4d5e1e,_0x147aca):_0x4d5e1e}),a0_0x5465(_0x147aca,_0x1c469e)}
-function a0_0x1cb6(){var _0x4e7f={key1:100,key2:200};return _0x4e7f}
-var result="test"===typeof process?a0_0x5465(0,"hello"):a0_0x5465(1,"world")
-```
 
-**Output** — comma operator expanded, function expression lifted to `_sub_return_fn1`, ternary split into if/else:
-
-```javascript
+// Output
 function a0_0x5465(_0x147aca, _0x1c469e) {
   var _0x477d9d = a0_0x1cb6();
   a0_0x5465 = _sub_return_fn1;
   return a0_0x5465(_0x147aca, _0x1c469e);
 }
-function a0_0x1cb6() {
-  var _0x4e7f = {
-    key1: 100,
-    key2: 200
-  };
-  return _0x4e7f;
-}
-var result;
-if ("test" === typeof process) {
-  result = a0_0x5465(0, "hello");
-} else {
-  result = a0_0x5465(1, "world");
-}
-// Original lines 1-170
 function _sub_return_fn1(_0x593f2d, _0x4d5e1e, _0x477d9d, _0x147aca) {
   var _0x2a8c = _0x477d9d[_0x593f2d];
   return _0x2a8c ? _0x2a8c(_0x4d5e1e, _0x147aca) : _0x4d5e1e;
 }
 ```
+
+↑ `return (a=fn, b)` → two statements; inline `function` lifted to `_sub_return_fn1` with external refs as params.
+
+### Short-circuit polyfill → if block
+
+```javascript
+// Input
+"undefined"==typeof Element||Element.prototype.addEventListener||(u=[],Ao=function(n,t){for(var e=0;e<u.length;){var r=u[e];if(r.object===this&&r.type===n){u.splice(e,1);break}++e}},Element.prototype.addEventListener=qo=function(n,t){function e(n){n.target=n.srcElement}t.handleEvent?t.handleEvent(n):t.call(i,n)})
+
+// Output
+if (!("undefined" == typeof Element) && !Element.prototype.addEventListener) {
+  u = [];
+  Ao = function (n, t) {
+    for (var e = 0; e < u.length;) {
+      var r = u[e];
+      if (r.object === this && r.type === n) {
+        u.splice(e, 1);
+        break;
+      }
+      ++e;
+    }
+  };
+  qo = function (n, t) {
+    function e(n) {
+      n.target = n.srcElement;
+    }
+    if (t.handleEvent) {
+      t.handleEvent(n);
+    } else {
+      t.call(i, n);
+    }
+  };
+  Element.prototype.addEventListener = qo;
+}
+```
+
+↑ `A||B||(C,D,E)` → `if(!A&&!B){C;D;E;}`; chained assignment split; ternary expanded.
+
+### Ternary variable → if/else
+
+```javascript
+// Input
+var handler="complete"===document.readyState?function(n){n(),console.log("done")}:function(n){document.addEventListener("DOMContentLoaded",n)}
+
+// Output
+var handler;
+if ("complete" === document.readyState) {
+  handler = function (n) {
+    n();
+    console.log("done");
+  };
+} else {
+  handler = function (n) {
+    document.addEventListener("DOMContentLoaded", n);
+  };
+}
+```
+
+↑ `var x = cond ? a : b` → `var x; if/else` with full block formatting.
 
 ## Naming Convention
 
