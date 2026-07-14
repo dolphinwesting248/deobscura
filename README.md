@@ -18,6 +18,10 @@ deob main.js output.js
 
 # Split into per-function files
 deob main.js output/ --split
+
+# Generate readability metrics report
+deob main.js --metrics
+deob main.js --split --metrics
 ```
 
 ## Pipeline (14 passes)
@@ -77,7 +81,7 @@ scripts/
 ├── pipeline.js       ← Main orchestration
 ├── extract.js        ← Splitting rules (IIFE, try-catch, if-else, …)
 ├── traverse.js       ← Innermost-first function collection
-├── passes.js         ← 16 post-processing passes
+├── passes.js         ← 14 post-processing passes
 ├── ast-utils.js      ← Generic AST walker, detectors, clone
 ├── scope.js          ← Variable scope & external reference analysis
 ├── emit.js           ← Sub-function declaration builder
