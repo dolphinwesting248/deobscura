@@ -99,7 +99,7 @@ function generateReport(before, after) {
   const cappedLabels = metrics.map((m, i) => {
     if (m.before === 0) return null;
     const real = (m.after / m.before) * 100 - 100;
-    if (Math.abs(real) > MAX_DEV) return (real > 0 ? "+" : "") + real.toFixed(0) + "%";
+    if (Math.abs(real) > MAX_DEV) return (real > 0 ? "+" : "") + real.toFixed(1) + "%";
     return null;
   });
 
@@ -110,7 +110,7 @@ function generateReport(before, after) {
     const aVal = m.after.toFixed(m.fmt);
     // When before=0 & after>0: chart caps at +100%, table must match
     const pct = m.before > 0 ? ((delta / m.before) * 100) : delta > 0 ? 100 : 0;
-    const pctStr = (pct > 0 ? "+" : "") + pct.toFixed(0) + "%";
+    const pctStr = (pct > 0 ? "+" : "") + pct.toFixed(1) + "%";
 
     const clazz = same ? "eq" : delta > 0 ? "up" : "down";
     const dir = same ? "-- unchanged" : delta > 0 ? "↑ increase" : "↓ decrease";
