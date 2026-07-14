@@ -12,7 +12,6 @@ function analyze(filepath) {
       errorRecovery: true,
     });
   } catch (e) {
-    // Fallback: regex-based analysis for files with sloppy-mode reserved words (let/if as variable names)
     return analyzeFallback(filepath, code);
   }
 
@@ -56,139 +55,115 @@ function walkAST(ast) {
 }
 
 function analyzeFallback(filepath, code) {
-  // Regex-based analysis for files that Babel can't parse (sloppy-mode reserved words)
   const fnMatches = code.match(/\bfunction\s/g) || [];
   const commentMatches = code.match(/\/\/\s*Original lines/g) || [];
   const lines = code.split("\n");
-
-  // Estimate nesting depth from indentation
   let maxIndent = 0;
   for (const line of lines) {
     const indent = line.match(/^(\s*)/)[1].length;
     if (indent > maxIndent) maxIndent = Math.min(indent, 200);
   }
-  const maxDepth = Math.round(maxIndent / 2);
-
   return {
-    file: filepath,
-    size: code.length,
-    sizeMB: code.length / 1024 / 1024,
-    lines: lines.length,
-    fnCount: fnMatches.length,
-    maxDepth: maxDepth,
-    maxBodyLen: 0,
-    avgBodyLen: 0,
-    avgParams: 0,
-    fnWithComments: commentMatches.length,
-    totalBodyLen: 0,
-    totalParams: 0,
-    fallback: true,
+    file: filepath, size: code.length, sizeMB: code.length / 1024 / 1024,
+    lines: lines.length, fnCount: fnMatches.length,
+    maxDepth: Math.round(maxIndent / 2), maxBodyLen: 0, avgBodyLen: 0,
+    avgParams: 0, fnWithComments: commentMatches.length,
+    totalBodyLen: 0, totalParams: 0, fallback: true,
   };
 }
 
 function generateReport(before, after) {
   const metrics = [
-    { label: "文件大小 (MB)", before: before.sizeMB, after: after.sizeMB, fmt: 2, better: "lower" },
-    { label: "总行数", before: before.lines, after: after.lines, fmt: 0, better: "higher" },
-    { label: "函数数量", before: before.fnCount, after: after.fnCount, fmt: 0, better: "higher" },
-    { label: "最大嵌套深度", before: before.maxDepth, after: after.maxDepth, fmt: 0, better: "lower" },
-    { label: "最大函数体(行)", before: before.maxBodyLen, after: after.maxBodyLen, fmt: 0, better: "lower" },
-    { label: "平均函数体(行)", before: before.avgBodyLen, after: after.avgBodyLen, fmt: 1, better: "lower" },
-    { label: "平均参数数", before: before.avgParams, after: after.avgParams, fmt: 1, better: "higher" },
-    { label: "带注释的函数", before: before.fnWithComments, after: after.fnWithComments, fmt: 0, better: "higher" },
+    { label: "Functions", before: before.fnCount, after: after.fnCount, fmt: 0, better: "higher" },
+    { label: "Avg Function Body", before: before.avgBodyLen, after: after.avgBodyLen, fmt: 1, better: "lower", unit: "lines" },
+    { label: "Max Nesting Depth", before: before.maxDepth, after: after.maxDepth, fmt: 0, better: "lower" },
+    { label: "Functions w/ Comments", before: before.fnWithComments, after: after.fnWithComments, fmt: 0, better: "higher" },
+    { label: "Avg Parameters", before: before.avgParams, after: after.avgParams, fmt: 1, better: "higher" },
+    { label: "File Size", before: before.sizeMB, after: after.sizeMB, fmt: 2, better: "lower", unit: "MB" },
+    { label: "Total Lines", before: before.lines, after: after.lines, fmt: 0, better: "higher" },
+    { label: "Max Function Body", before: before.maxBodyLen, after: after.maxBodyLen, fmt: 0, better: "lower", unit: "lines" },
   ];
 
-  const maxVal = Math.max(...metrics.flatMap((m) => [m.before, m.after]));
-  const barWidth = 350;
-  const bars = metrics.map((m, i) => {
-    const bPct = Math.round((m.before / maxVal) * barWidth);
-    const aPct = Math.round((m.after / maxVal) * barWidth);
+  const rows = metrics.map((m) => {
     const delta = m.after - m.before;
-    const deltaPct = m.before > 0 ? ((delta / m.before) * 100).toFixed(0) : "N/A";
-    const isGood = (m.better === "higher" && delta > 0) || (m.better === "lower" && delta < 0);
-    const color = isGood ? "#22c55e" : "#ef4444";
+    const improved = (m.better === "higher" && delta > 0) || (m.better === "lower" && delta < 0);
+    const same = delta === 0;
     const bVal = m.before.toFixed(m.fmt);
     const aVal = m.after.toFixed(m.fmt);
-    const sign = delta > 0 ? "+" : "";
-    return `
-    <tr>
-      <td>${m.label}</td>
-      <td class="num">${bVal}</td>
-      <td>
-        <div class="bar-container">
-          <div class="bar before" style="width:${bPct}px">${bVal}</div>
-        </div>
-      </td>
-      <td class="num">${aVal}</td>
-      <td>
-        <div class="bar-container">
-          <div class="bar after" style="width:${aPct}px">${aVal}</div>
-        </div>
-      </td>
-      <td style="color:${color};font-weight:600">${sign}${delta.toFixed(m.fmt)} (${sign}${deltaPct}%)</td>
-    </tr>`;
-  }).join("\n");
+    const unit = m.unit || "";
+    const signStr = delta > 0 ? "+" : "";
+    const dPct = m.before > 0 ? (signStr + Math.abs((delta / m.before) * 100).toFixed(0)) : "N/A";
+    return {
+      label: m.label, bVal, aVal, unit,
+      direction: improved ? "↑ improved" : same ? "-- unchanged" : "↓ worse",
+      clazz: improved ? "improved" : same ? "same" : "worse",
+    };
+  });
+
+  const improved = rows.filter((r) => r.clazz === "improved").length;
 
   return `<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Deobfuscation Metrics Report</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>deob · Readability Report</title>
 <style>
-  body { font-family: -apple-system, Segoe UI, sans-serif; max-width:960px; margin:40px auto; padding:0 20px; color:#1e293b; background:#f8fafc; }
-  h1 { font-size:24px; margin-bottom:4px; }
-  .sub { color:#64748b; margin-bottom:24px; }
-  table { width:100%; border-collapse:collapse; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.08); }
-  th { background:#f1f5f9; padding:10px 14px; text-align:left; font-size:13px; color:#475569; }
-  td { padding:10px 14px; border-bottom:1px solid #f1f5f9; font-size:14px; }
-  .num { text-align:right; font-variant-numeric:tabular-nums; min-width:60px; }
-  .bar-container { background:#f1f5f9; border-radius:3px; width:360px; height:20px; position:relative; }
-  .bar { height:100%; border-radius:3px; display:flex; align-items:center; padding-left:6px; font-size:11px; color:#fff; font-weight:600; min-width:40px; }
-  .bar.before { background:#94a3b8; }
-  .bar.after { background:#3b82f6; }
-  .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:32px; }
-  .card { background:#fff; border-radius:8px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.08); text-align:center; }
-  .card .value { font-size:36px; font-weight:700; }
-  .card .label { font-size:13px; color:#64748b; margin-top:4px; }
-  .green { color:#22c55e; }
-  .blue { color:#3b82f6; }
-  .legend { display:flex; gap:20px; margin-bottom:12px; font-size:13px; }
-  .legend span { display:flex; align-items:center; gap:6px; }
-  .legend .swatch { width:14px; height:14px; border-radius:3px; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+  .wrap{max-width:720px;margin:0 auto;padding:48px 24px}
+  h1{font-size:26px;font-weight:700;letter-spacing:-.5px;margin-bottom:4px}
+  h1 span{color:#6366f1}
+  .path{color:#64748b;font-size:13px;font-family:ui-monospace,monospace}
+  .header{margin-bottom:36px}
+  .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:36px}
+  .kpi-card{background:linear-gradient(135deg,#1e293b,#1a2332);border-radius:12px;padding:22px;border:1px solid #1e293b;text-align:center}
+  .kpi-card .val{font-size:38px;font-weight:800;line-height:1}
+  .kpi-card .val.g{color:#22c55e}
+  .kpi-card .val.i{color:#6366f1}
+  .kpi-card .val.w{color:#f59e0b}
+  .kpi-card .lbl{font-size:12px;color:#64748b;margin-top:6px;text-transform:uppercase;letter-spacing:.5px}
+  .sec{font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+  .list{display:flex;flex-direction:column;gap:6px}
+  .row{background:#1e293b;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px;border:1px solid transparent;transition:border-color .2s}
+  .row:hover{border-color:#334155}
+  .row-label{flex:1;font-size:14px;color:#cbd5e1}
+  .row-vals{display:flex;align-items:center;gap:10px;font-size:13px;font-variant-numeric:tabular-nums}
+  .row-vals .bf{color:#64748b}
+  .row-vals .ar{color:#e2e8f0;font-weight:600}
+  .row-vals .arr{color:#475569}
+  .tag{font-size:12px;font-weight:600;min-width:100px;text-align:right}
+  .tag.up{color:#22c55e}
+  .tag.down{color:#ef4444}
+  .tag.eq{color:#64748b}
+  .foot{text-align:center;color:#475569;font-size:12px;margin-top:40px}
+  .foot a{color:#6366f1;text-decoration:none}
 </style>
 </head>
 <body>
-<h1>Deobfuscation Metrics Report</h1>
-<div class="sub">${before.file} → ${after.file}${before.fallback ? " (metrics are regex-based estimates)" : ""}</div>
-
-<div class="summary">
-  <div class="card">
-    <div class="value green">${after.fnCount}</div>
-    <div class="label">函数数量</div>
+<div class="wrap">
+  <div class="header">
+    <h1>deob <span>·</span> Readability Report</h1>
+    <div class="path">${before.file} → ${after.file}${before.fallback ? "  (regex-based)" : ""}</div>
   </div>
-  <div class="card">
-    <div class="value blue">${after.fnWithComments}</div>
-    <div class="label">带注释的函数</div>
+  <div class="kpi">
+    <div class="kpi-card"><div class="val g">${after.fnCount}</div><div class="lbl">Functions</div></div>
+    <div class="kpi-card"><div class="val i">${after.fnWithComments}</div><div class="lbl">With Comments</div></div>
+    <div class="kpi-card"><div class="val w">${improved}/${rows.length}</div><div class="lbl">Improved</div></div>
   </div>
-  <div class="card">
-    <div class="value" style="color:#1e293b">${before.maxDepth} → ${after.maxDepth}</div>
-    <div class="label">最大嵌套深度</div>
+  <div class="sec">Metrics</div>
+  <div class="list">
+${rows.map((r) => `
+    <div class="row">
+      <div class="row-label">${r.label}</div>
+      <div class="row-vals">
+        <span class="bf">${r.bVal}${r.unit}</span><span class="arr">→</span><span class="ar">${r.aVal}${r.unit}</span>
+      </div>
+      <div class="tag ${r.clazz === "improved" ? "up" : r.clazz === "worse" ? "down" : "eq"}">${r.direction}</div>
+    </div>`).join("")}
   </div>
+  <div class="foot">Generated by <a href="#">deob</a> · ${new Date().toISOString().slice(0, 10)}</div>
 </div>
-
-<div class="legend">
-  <span><div class="swatch" style="background:#94a3b8"></div> Before</span>
-  <span><div class="swatch" style="background:#3b82f6"></div> After</span>
-</div>
-
-<table>
-<tr><th>指标</th><th>之前</th><th></th><th>之后</th><th></th><th>Δ</th></tr>
-${bars}
-</table>
-
-<p style="text-align:center;color:#94a3b8;margin-top:28px;font-size:12px">
-  Generated by deob metrics &mdash; ${new Date().toISOString().slice(0, 10)}
-</p>
 </body>
 </html>`;
 }
@@ -197,10 +172,7 @@ function runMetrics(input, output) {
   console.log("Analyzing before/after metrics...");
   const before = analyze(input);
   const after = analyze(output);
-  const reportPath = output.replace(/\.deob\.js$/, ".deob") + "/metrics.html";
   const html = generateReport(before, after);
-
-  // Write alongside output (or as single file if not split)
   const outPath = output.endsWith(".js")
     ? output.replace(/\.js$/, ".metrics.html")
     : output + "/metrics.html";
