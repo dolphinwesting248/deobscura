@@ -87,16 +87,21 @@ function generateReport(before, after) {
   const labels = metrics.map((m) => m.label);
 
   // Normalize: before = 100, chart shows deviation from 100%
-  // Increase = green bar above baseline, decrease = red bar below baseline
+  // Capped at ±200% so extreme values (e.g. +1553%) don't flatten other bars
+  const MAX_DEV = 200;
   const chartData = metrics.map((m) => {
-    if (m.before === 0) {
-      // When Before is 0, After being >0 is a new addition (cap at +100%)
-      return m.after > 0 ? 100 : 0;
-    }
-    const raw = (m.after / m.before) * 100;
-    return raw - 100;
+    if (m.before === 0) return m.after > 0 ? 100 : 0;
+    const dev = (m.after / m.before) * 100 - 100;
+    return Math.max(-MAX_DEV, Math.min(MAX_DEV, dev));
   });
-  const chartColors = chartData.map((v) => v > 0 ? "#22c55e" : v < 0 ? "#ef4444" : "#64748b");
+  const chartColors = chartData.map((v) => v > 0 ? "#3fb950" : v < 0 ? "#f85149" : "#484f58");
+  // Annotate bars that exceed the cap with their real value
+  const cappedLabels = metrics.map((m, i) => {
+    if (m.before === 0) return null;
+    const real = (m.after / m.before) * 100 - 100;
+    if (Math.abs(real) > MAX_DEV) return (real > 0 ? "+" : "") + real.toFixed(0) + "%";
+    return null;
+  });
 
   const rows = metrics.map((m) => {
     const delta = m.after - m.before;
@@ -211,10 +216,15 @@ new Chart(document.getElementById('chart'), {
   options: {
     responsive:true,
     interaction:{intersect:false,mode:'index'},
-    plugins:{legend:{display:false},tooltip:{backgroundColor:'#161b22',titleColor:'#8b949e',bodyColor:'#e6edf3',bodyFont:{family:'ui-monospace,monospace',size:13},padding:10,cornerRadius:6,callbacks:{label:(c)=>(c.raw>0?'+':'')+c.raw.toFixed(1)+'%'}}},
+    plugins:{
+      legend:{display:false},
+      tooltip:{backgroundColor:'#161b22',titleColor:'#8b949e',bodyColor:'#e6edf3',bodyFont:{family:'ui-monospace,monospace',size:13},padding:10,cornerRadius:6,callbacks:{
+        label:(c)=>{const i=c.dataIndex;const real=${JSON.stringify(cappedLabels)};return real[i]||((c.raw>0?'+':'')+c.raw.toFixed(1)+'%');}
+      }}
+    },
     scales:{
       x:{ticks:{color:'#8b949e',font:{size:10},maxRotation:45,minRotation:0},grid:{color:'#21262d',drawBorder:false}},
-      y:{position:'right',ticks:{color:'#8b949e',font:{size:10,family:'ui-monospace,monospace'},callback:(v)=>(v>0?'+':'')+v+'%',stepSize:20},grid:{color:'#21262d',drawBorder:false},border:{dash:[3,3]}}
+      y:{min:-${MAX_DEV},max:${MAX_DEV},position:'right',ticks:{color:'#8b949e',font:{size:10,family:'ui-monospace,monospace'},callback:(v)=>(v>0?'+':'')+v+'%',stepSize:50},grid:{color:'#21262d',drawBorder:false},border:{dash:[3,3]}}
     }
   }
 });
