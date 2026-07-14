@@ -159,7 +159,7 @@ function _sub_return_fn1(_0x593f2d, _0x4d5e1e, _0x477d9d, _0x147aca) {
 "undefined"==typeof Element||Element.prototype.addEventListener||(u=[],Ao=function(n,t){for(var e=0;e<u.length;){var r=u[e];if(r.object===this&&r.type===n){u.splice(e,1);break}++e}},Element.prototype.addEventListener=qo=function(n,t){function e(n){n.target=n.srcElement}t.handleEvent?t.handleEvent(n):t.call(i,n)})
 
 // Output
-if (!("undefined" == typeof Element) && !Element.prototype.addEventListener) {
+if ("undefined" != typeof Element && !Element.prototype.addEventListener) {
   u = [];
   Ao = function (n, t) {
     for (var e = 0; e < u.length;) {

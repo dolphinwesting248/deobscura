@@ -819,11 +819,10 @@ function simplifyRedundantConditions(ast) {
       return t.unaryExpression("!", walk(node.test));
     }
 
-    // !!a where a is already boolean → a  (skip if a is not a simple identifier)
+    // !!a → a  (skip triple+ negation to not interfere with !!!a → !a above)
     if (t.isUnaryExpression(node) && node.operator === "!" &&
         t.isUnaryExpression(node.argument) && node.argument.operator === "!" &&
-        t.isUnaryExpression(node.argument.argument) && node.argument.argument.operator === "!" === false) {
-      // Only simplify !!<identifier> or !!(<simple>)
+        !(t.isUnaryExpression(node.argument.argument) && node.argument.argument.operator === "!")) {
       count++;
       return walk(node.argument.argument);
     }
@@ -834,6 +833,26 @@ function simplifyRedundantConditions(ast) {
         t.isUnaryExpression(node.argument.argument) && node.argument.argument.operator === "!") {
       count++;
       return t.unaryExpression("!", walk(node.argument.argument.argument));
+    }
+
+    // --- Negated comparison: !(a == b) → a != b, !(a < b) → a >= b ---
+    const NEGATE_OP = { "==": "!=", "!=": "==", "===": "!==", "!==": "===", "<": ">=", ">": "<=", "<=": ">", ">=": "<" };
+    if (t.isUnaryExpression(node) && node.operator === "!" &&
+        t.isBinaryExpression(node.argument) && NEGATE_OP[node.argument.operator]) {
+      count++;
+      return t.binaryExpression(NEGATE_OP[node.argument.operator], walk(node.argument.left), walk(node.argument.right));
+    }
+
+    // --- De Morgan: !(a || b) → !a && !b,  !(a && b) → !a || !b ---
+    if (t.isUnaryExpression(node) && node.operator === "!" &&
+        t.isLogicalExpression(node.argument)) {
+      const inner = node.argument;
+      const newOp = inner.operator === "||" ? "&&" : "||";
+      count++;
+      return t.logicalExpression(newOp,
+        t.unaryExpression("!", walk(inner.left)),
+        t.unaryExpression("!", walk(inner.right)),
+      );
     }
 
     // Recurse
