@@ -14,6 +14,7 @@ deob main.js                         # → main.deob/main.js
 deob main.js --split                 # → main.deob/ (per-function files)
 deob main.js --metrics               # → main.deob/ + metrics.html
 deob main.js --md --json             # → main.deob/ + structure reports
+deob main.js --index                 # deobfuscate + build code index
 deob main.js --split --metrics --md --json --index  # everything
 ```
 
@@ -38,6 +39,31 @@ main.deob/
 | `--md` | `structure.md` | Function inventory, call graph, naming convention docs |
 | `--json` | `structure.json` | Same as `--md` in machine-readable JSON |
 | `--index` | `.index/` | Build a code intelligence index for AI-assisted exploration |
+
+### Code Index (`--index`)
+
+Builds a SQLite knowledge graph of the deobfuscated output using `node:sqlite` and `@babel/traverse` (zero extra dependencies). No external CLI required.
+
+**What's indexed:**
+- Every function, class, variable, and constant → `nodes` table
+- Call graph (who calls whom), containment, instantiation → `edges` table
+- Full-text search via FTS5 over symbol names and signatures
+
+**Optimizations for deob output:**
+- Skips `index.js` glue files (34% fewer indexed files)
+- Tags every node with `metadata.group` (parent directory) for structured queries
+- Filters noise `MemberExpression` references from obfuscated identifiers
+
+**Example query:**
+```sql
+-- Find all functions in the "misc" group
+SELECT name, file_path FROM nodes
+WHERE json_extract(metadata, '$.group') = 'misc' AND kind = 'function';
+
+-- Find the most-called functions
+SELECT target, COUNT(*) as calls FROM edges
+WHERE kind = 'calls' GROUP BY target ORDER BY calls DESC LIMIT 10;
+```
 
 ## Pipeline (14 passes)
 
@@ -116,7 +142,12 @@ scripts/
 ├── naming.js         ← Naming convention helpers
 ├── wrapper.js        ← Top-level IIFE extraction
 ├── config.js         ← Parser, generator, globals
-└── index.js          ← Public API exports
+├── index.js          ← Public API exports
+└── indexer/          ← Built-in code intelligence indexer (--index)
+    ├── index.js      ← Orchestration: scan → extract → store → resolve
+    ├── extract.js    ← Babel-based JS symbol & call-graph extractor
+    ├── schema.js     ← SQLite schema (compatible with codegraph)
+    └── store.js      ← node:sqlite database operations
 ```
 
 ## Adding a Pass
