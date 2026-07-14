@@ -294,6 +294,135 @@ function simplifyStrings(ast) {
   console.log(`  Simplified ${count} string operations`);
 }
 
+// ---- simplify: combined fold+boolean+strings+ast-normalize in ONE walk ----
+function simplify(ast) {
+  let foldCount = 0, boolCount = 0, strCount = 0, normCount = 0;
+
+  function isFoldable(node) {
+    if (!node) return false;
+    if (t.isNumericLiteral(node) || t.isStringLiteral(node) || t.isBooleanLiteral(node)) return true;
+    if (t.isUnaryExpression(node) && isFoldable(node.argument)) return true;
+    if (t.isBinaryExpression(node) && isFoldable(node.left) && isFoldable(node.right)) return true;
+    return false;
+  }
+  function evalConst(node) {
+    if (t.isNumericLiteral(node)) return node.value;
+    if (t.isStringLiteral(node)) return node.value;
+    if (t.isBooleanLiteral(node)) return node.value;
+    if (t.isUnaryExpression(node)) {
+      const a = evalConst(node.argument); if (a === undefined) return undefined;
+      switch (node.operator) {
+        case "-": return -a; case "+": return +a; case "!": return !a;
+        case "~": return ~a; case "void": return undefined; case "typeof": return typeof a;
+      }
+    }
+    if (t.isBinaryExpression(node)) {
+      const l = evalConst(node.left), r = evalConst(node.right);
+      if (l === undefined || r === undefined) return undefined;
+      switch (node.operator) {
+        case "+": return l+r; case "-": return l-r; case "*": return l*r;
+        case "/": return r===0?undefined:l/r; case "%": return r===0?undefined:l%r; case "**": return l**r;
+        case "|": return l|r; case "&": return l&r; case "^": return l^r;
+        case "<<": return l<<r; case ">>": return l>>r; case ">>>": return l>>>r;
+        case "==": return l==r; case "!=": return l!=r; case "===": return l===r; case "!==": return l!==r;
+        case "<": return l<r; case ">": return l>r; case "<=": return l<=r; case ">=": return l>=r;
+      }
+    }
+    return undefined;
+  }
+  function litResult(v) {
+    if (typeof v === "string") return t.stringLiteral(v);
+    if (typeof v === "boolean") return t.booleanLiteral(v);
+    if (typeof v === "number") {
+      if (Number.isNaN(v)) return t.identifier("NaN");
+      if (!Number.isFinite(v)) return v>0?t.identifier("Infinity"):t.binaryExpression("-", t.identifier("Infinity"));
+      return t.numericLiteral(v);
+    }
+    return t.identifier("undefined");
+  }
+
+  function walk(node) {
+    if (!node || typeof node !== "object") return node;
+
+    // --- boolean: !![]→true, ![]→false, void 0→undefined ---
+    if (t.isUnaryExpression(node) && node.operator === "!" &&
+        t.isUnaryExpression(node.argument) && node.argument.operator === "!" &&
+        t.isArrayExpression(node.argument.argument) && node.argument.argument.elements.length === 0)
+      { boolCount++; return t.booleanLiteral(true); }
+    if (t.isUnaryExpression(node) && node.operator === "!" &&
+        t.isArrayExpression(node.argument) && node.argument.elements.length === 0)
+      { boolCount++; return t.booleanLiteral(false); }
+    if (t.isUnaryExpression(node) && node.operator === "void" &&
+        t.isNumericLiteral(node.argument) && node.argument.value === 0)
+      { boolCount++; return t.identifier("undefined"); }
+
+    // --- fold: constant expressions ---
+    if (t.isBinaryExpression(node) && isFoldable(node.left) && isFoldable(node.right)) {
+      const v = evalConst(node);
+      if (v !== undefined) { foldCount++; return litResult(v); }
+    }
+    if (t.isUnaryExpression(node) && isFoldable(node.argument)) {
+      const v = evalConst(node);
+      if (v !== undefined) {
+        foldCount++;
+        if (typeof v === "boolean") return t.booleanLiteral(v);
+        if (typeof v === "number") return t.numericLiteral(v);
+        if (typeof v === "undefined" || v === undefined) return t.identifier("undefined");
+      }
+    }
+
+    // --- strings: String.fromCharCode etc ---
+    if (t.isCallExpression(node) &&
+        t.isMemberExpression(node.callee) && t.isIdentifier(node.callee.object, { name: "String" }) &&
+        t.isIdentifier(node.callee.property, { name: "fromCharCode" }) &&
+        node.arguments.every((a) => t.isNumericLiteral(a)))
+      { strCount++; return t.stringLiteral(String.fromCharCode(...node.arguments.map((a) => a.value))); }
+    if (t.isCallExpression(node) && t.isMemberExpression(node.callee) &&
+        t.isStringLiteral(node.callee.object) && node.arguments.every((a) => t.isNumericLiteral(a)) &&
+        node.callee.property && t.isIdentifier(node.callee.property)) {
+      const method = node.callee.property.name;
+      const obj = node.callee.object.value;
+      const args = node.arguments.map((a) => a.value);
+      if (method === "charAt" && args.length === 1) { strCount++; return t.stringLiteral(obj.charAt(args[0])); }
+      if (method === "charCodeAt" && args.length === 1) { strCount++; return t.numericLiteral(obj.charCodeAt(args[0])); }
+      if ((method === "slice" || method === "substr" || method === "substring") && args.length >= 1 && args.length <= 2) { strCount++; return t.stringLiteral(obj[method](args[0], args[1])); }
+      if ((method === "toUpperCase" || method === "toLowerCase" || method === "trim" || method === "trimStart" || method === "trimEnd") && args.length === 0) { strCount++; return t.stringLiteral(obj[method]()); }
+      if ((method === "indexOf" || method === "lastIndexOf") && args.length === 1 && t.isStringLiteral(node.arguments[0])) { strCount++; return t.numericLiteral(obj[method](node.arguments[0].value)); }
+    }
+
+    // --- normalize (AST-level): ~arr.indexOf→arr.includes, ~~x→Math.trunc, +x→Number ---
+    if (t.isUnaryExpression(node) && node.operator === "~" &&
+        t.isCallExpression(node.argument) && t.isMemberExpression(node.argument.callee) &&
+        t.isIdentifier(node.argument.callee.property, { name: "indexOf" }))
+      { normCount++; return t.callExpression(t.memberExpression(node.argument.callee.object, t.identifier("includes")), node.argument.arguments); }
+    if (t.isUnaryExpression(node) && node.operator === "~" &&
+        t.isUnaryExpression(node.argument) && node.argument.operator === "~")
+      { normCount++; return t.callExpression(t.memberExpression(t.identifier("Math"), t.identifier("trunc")), [node.argument.argument]); }
+    if (t.isUnaryExpression(node) && node.operator === "+" && !t.isNumericLiteral(node.argument) && t.isIdentifier(node.argument))
+      { normCount++; return t.callExpression(t.identifier("Number"), [node.argument]); }
+
+    // Recurse
+    for (const key of Object.keys(node)) {
+      if (key === "start" || key === "end" || key === "loc" ||
+          key === "leadingComments" || key === "trailingComments" || key === "innerComments") continue;
+      const val = node[key];
+      if (Array.isArray(val)) {
+        for (let i = 0; i < val.length; i++) {
+          if (val[i] && typeof val[i].type === "string") val[i] = walk(val[i]);
+        }
+      } else if (val && typeof val.type === "string") {
+        node[key] = walk(val);
+      }
+    }
+    return node;
+  }
+
+  walk(ast);
+  // Second pass for cascading folds
+  walk(ast);
+  console.log(`  Fold:${foldCount} Bool:${boolCount} Str:${strCount} Norm:${normCount}`);
+}
+
 // ---- expandSequences: break comma chains into independent statements ----
 function expandSequences(ast) {
   let count = 0;
@@ -1097,9 +1226,7 @@ function extractInlineFunctions(ast) {
 
 module.exports = {
   hoistDeclarations,
-  constantFold,
-  simplifyBooleanObfuscation,
-  simplifyStrings,
+  simplify,
   expandSequences,
   eliminateDeadCode,
   inlineReadOnlyProperties,

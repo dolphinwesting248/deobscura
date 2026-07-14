@@ -97,6 +97,12 @@ function descIIFE(stmts) {
 // ---- Clone ----
 function clone(n) {
   if (!n || typeof n !== "object") return n;
+  // Fast-path: simple literals (avoid full object copy for ~45K inline-props calls)
+  if (t.isNumericLiteral(n)) return t.numericLiteral(n.value);
+  if (t.isStringLiteral(n)) return t.stringLiteral(n.value);
+  if (t.isBooleanLiteral(n)) return t.booleanLiteral(n.value);
+  if (t.isIdentifier(n) && n.name === "undefined") return t.identifier("undefined");
+
   const copy = {};
   for (const key of Object.keys(n)) {
     if (key === "start" || key === "end" || key === "loc") continue;
