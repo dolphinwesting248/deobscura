@@ -89,9 +89,11 @@ function generateReport(before, after) {
   // Normalize: before = 100, chart shows deviation from 100%
   // Increase = green bar above baseline, decrease = red bar below baseline
   const chartData = metrics.map((m) => {
-    if (m.before === 0) return 0;
+    if (m.before === 0) {
+      // When Before is 0, After being >0 is a new addition (cap at +100%)
+      return m.after > 0 ? 100 : 0;
+    }
     const raw = (m.after / m.before) * 100;
-    // Convert to deviation from 100%: +20 = 20% increase, -15 = 15% decrease
     return raw - 100;
   });
   const chartColors = chartData.map((v) => v > 0 ? "#22c55e" : v < 0 ? "#ef4444" : "#64748b");
