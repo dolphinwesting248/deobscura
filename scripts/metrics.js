@@ -84,30 +84,37 @@ function generateReport(before, after) {
     { label: "Max Function Body", before: before.maxBodyLen, after: after.maxBodyLen, fmt: 0, better: "lower", unit: "lines" },
   ];
 
-  const bars = metrics.map((m) => {
+  const labels = metrics.map((m) => m.label);
+
+  // Normalize: before = 100, after = (after/before)*100
+  // Invert lower-is-better metrics so 100=ideal in both cases
+  const beforeNorm = metrics.map(() => 100);
+  const afterNorm = metrics.map((m) => {
+    const raw = m.before > 0 ? (m.after / m.before) * 100 : 100;
+    // For "lower is better" metrics, invert: going from 42→38 means improvement = 100+(42-38)/42*100
+    if (m.better === "lower" && m.before > 0) {
+      return 100 + ((m.before - m.after) / m.before) * 100;
+    }
+    return raw;
+  });
+
+  const rows = metrics.map((m, i) => {
     const delta = m.after - m.before;
-    const pct = m.before > 0 ? ((delta / m.before) * 100) : 0;
-    const absPct = Math.abs(pct);
     const favorable = (m.better === "higher" && delta > 0) || (m.better === "lower" && delta < 0);
     const same = delta === 0;
     const bVal = m.before.toFixed(m.fmt);
     const aVal = m.after.toFixed(m.fmt);
-    const unit = m.unit || "";
-    const signStr = delta > 0 ? "+" : "";
-    const pctStr = signStr + pct.toFixed(0);
-
-    const clazz = same ? "eq" : favorable ? "up" : "down";
-    const dirLabel = same ? "-- unchanged" : favorable ? "↓ decreased" : "↑ increased";
-
+    const sign = delta > 0 ? "+" : "";
+    const pct = m.before > 0 ? (sign + ((delta / m.before) * 100).toFixed(0)) : "0";
     return {
-      label: m.label, bVal, aVal, unit, pctStr, absPct,
-      direction: same ? "-- unchanged" : (Math.abs(pct) <= 1 ? "-- unchanged" : dirLabel),
-      clazz, barW: Math.min(100, Math.max(2, Math.round(absPct))),
+      label: m.label, bVal, aVal, unit: m.unit || "",
+      dir: same ? "-- unchanged" : favorable ? "↓ decreased" : "↑ increased",
+      clazz: same ? "eq" : favorable ? "up" : "down",
+      pct: pct + "%",
     };
   });
 
-  const favorable = bars.filter((r) => r.clazz === "up").length;
-  const same = bars.filter((r) => r.clazz === "eq").length;
+  const favorable = rows.filter((r) => r.clazz === "up").length;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -115,10 +122,11 @@ function generateReport(before, after) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>deob · Readability Report</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
-  .wrap{max-width:780px;margin:0 auto;padding:48px 24px}
+  .wrap{max-width:840px;margin:0 auto;padding:48px 24px}
   h1{font-size:26px;font-weight:700;letter-spacing:-.5px;margin-bottom:4px}
   h1 span{color:#6366f1}
   .path{color:#64748b;font-size:13px;font-family:ui-monospace,monospace}
@@ -128,25 +136,17 @@ function generateReport(before, after) {
   .kpi-card .val{font-size:38px;font-weight:800;line-height:1}
   .val.g{color:#22c55e} .val.i{color:#6366f1} .val.w{color:#f59e0b}
   .kpi-card .lbl{font-size:12px;color:#64748b;margin-top:6px;text-transform:uppercase;letter-spacing:.5px}
-  .sec{font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
-  .chart{display:flex;flex-direction:column;gap:8px;margin-bottom:36px}
-  .chart-row{display:flex;align-items:center;gap:12px}
-  .chart-label{width:180px;font-size:13px;color:#cbd5e1;text-align:right;flex-shrink:0}
-  .chart-track{flex:1;height:22px;background:#1e293b;border-radius:6px;overflow:hidden;position:relative}
-  .chart-bar{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:11px;font-weight:700;transition:width .6s ease}
-  .chart-bar.up{background:linear-gradient(90deg,#166534,#22c55e)}
-  .chart-bar.down{background:linear-gradient(90deg,#991b1b,#ef4444)}
-  .chart-bar.eq{background:#334155}
-  .chart-val{width:48px;font-size:12px;font-weight:600;text-align:left;flex-shrink:0}
-  .chart-val.up{color:#22c55e} .chart-val.down{color:#ef4444} .chart-val.eq{color:#64748b}
-  .chart-abs{width:130px;font-size:11px;color:#64748b;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums}
-  .detail{display:flex;flex-direction:column;gap:6px}
-  .d-row{display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px}
-  .d-label{flex:1;color:#cbd5e1}
-  .d-vals{display:flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums}
-  .d-bf{color:#64748b} .d-arr{color:#475569} .d-af{color:#e2e8f0;font-weight:600}
-  .d-tag{font-size:12px;font-weight:600;min-width:100px;text-align:right}
-  .d-tag.up{color:#22c55e}.d-tag.down{color:#ef4444}.d-tag.eq{color:#64748b}
+  .chart-box{background:#1e293b;border-radius:12px;padding:24px;border:1px solid #1e293b;margin-bottom:36px}
+  .chart-box canvas{max-height:340px}
+  .sec{font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+  .list{display:flex;flex-direction:column;gap:6px}
+  .row{background:#1e293b;border-radius:10px;padding:14px 18px;display:flex;align-items:center;gap:14px;border:1px solid transparent;transition:border-color .2s}
+  .row:hover{border-color:#334155}
+  .row-label{flex:1;font-size:14px;color:#cbd5e1}
+  .row-vals{display:flex;align-items:center;gap:10px;font-size:13px;font-variant-numeric:tabular-nums}
+  .row-vals .bf{color:#64748b}.row-vals .ar{color:#e2e8f0;font-weight:600}.row-vals .arr{color:#475569}
+  .tag{font-size:12px;font-weight:600;min-width:100px;text-align:right}
+  .tag.up{color:#22c55e}.tag.down{color:#ef4444}.tag.eq{color:#64748b}
   .foot{text-align:center;color:#475569;font-size:12px;margin-top:40px}
   .foot a{color:#6366f1;text-decoration:none}
 </style>
@@ -158,35 +158,48 @@ function generateReport(before, after) {
     <div class="path">${before.file} → ${after.file}${before.fallback ? "  (regex-based)" : ""}</div>
   </div>
   <div class="kpi">
-    <div class="kpi-card"><div class="val g">${favorable}/${bars.length}</div><div class="lbl">Improved</div></div>
+    <div class="kpi-card"><div class="val g">${favorable}/${rows.length}</div><div class="lbl">Improved</div></div>
     <div class="kpi-card"><div class="val i">${after.fnCount}</div><div class="lbl">Functions</div></div>
     <div class="kpi-card"><div class="val w">${after.fnWithComments}</div><div class="lbl">With Comments</div></div>
   </div>
-  <div class="sec">Change Rate (%)</div>
-  <div class="chart">
-${bars.map((b) => `
-    <div class="chart-row">
-      <div class="chart-label">${b.label}</div>
-      <div class="chart-track">
-        <div class="chart-bar ${b.clazz}" style="width:${b.barW}%">${b.absPct >= 10 ? b.pctStr + '%' : ''}</div>
-      </div>
-      <div class="chart-val ${b.clazz}">${b.pctStr}%</div>
-      <div class="chart-abs">${b.bVal}${b.unit} → ${b.aVal}${b.unit}</div>
-    </div>`).join("")}
+  <div class="chart-box">
+    <div class="sec">Normalized (Before = 100%)</div>
+    <canvas id="chart"></canvas>
   </div>
   <div class="sec">Details</div>
-  <div class="detail">
-${bars.map((b) => `
-    <div class="d-row">
-      <div class="d-label">${b.label}</div>
-      <div class="d-vals">
-        <span class="d-bf">${b.bVal}${b.unit}</span><span class="d-arr">→</span><span class="d-af">${b.aVal}${b.unit}</span>
-      </div>
-      <div class="d-tag ${b.clazz}">${b.direction}</div>
+  <div class="list">
+${rows.map((r) => `
+    <div class="row">
+      <div class="row-label">${r.label}</div>
+      <div class="row-vals"><span class="bf">${r.bVal}${r.unit}</span><span class="arr">→</span><span class="ar">${r.aVal}${r.unit}</span></div>
+      <div class="tag ${r.clazz}">${r.pct} ${r.dir}</div>
     </div>`).join("")}
   </div>
   <div class="foot">Generated by <a href="#">deob</a> · ${new Date().toISOString().slice(0, 10)}</div>
 </div>
+<script>
+new Chart(document.getElementById('chart'), {
+  type: 'bar',
+  data: {
+    labels: ${JSON.stringify(labels)},
+    datasets: [
+      { label: 'Before', data: ${JSON.stringify(beforeNorm)}, backgroundColor: '#475569', borderRadius: 4, borderSkipped: false },
+      { label: 'After',  data: ${JSON.stringify(afterNorm)},  backgroundColor: '#6366f1', borderRadius: 4, borderSkipped: false },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: '#94a3b8', font:{size:13}, usePointStyle:true, pointStyleWidth:10 } },
+      tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': ' + ctx.raw.toFixed(1) + '%' } }
+    },
+    scales: {
+      x: { ticks: { color:'#64748b', font:{size:11}, maxRotation:45, minRotation:0 }, grid:{color:'#1e293b'} },
+      y: { ticks: { color:'#64748b', callback: (v) => v + '%' }, grid:{color:'#1e293b'}, beginAtZero:false }
+    }
+  }
+});
+</script>
 </body>
 </html>`;
 }
