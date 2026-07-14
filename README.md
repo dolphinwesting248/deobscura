@@ -137,10 +137,8 @@ function a0_0x5465(_0x147aca,_0x1c469e){const _0x477d9d=a0_0x1cb6();return (a0_0
 // After: deobfuscated
 function a0_0x5465(_0x147aca, _0x1c469e) {
   const _0x477d9d = a0_0x1cb6();
-  return (
-    (a0_0x5465 = _sub_return_fn1),
-    a0_0x5465(_0x147aca, _0x1c469e)
-  );
+  a0_0x5465 = _sub_return_fn1;
+  return a0_0x5465(_0x147aca, _0x1c469e);
 }
 
 // Original lines 1-170

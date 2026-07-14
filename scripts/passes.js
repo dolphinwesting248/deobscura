@@ -372,7 +372,7 @@ function expandSequences(ast) {
       }
       // Last replaces current statement
       newStmts.push(t.expressionStatement(exprs[exprs.length - 1]));
-      replacements.push({ array: parentArray, index: stmtIndex, stmts: newStmts });
+      if (parentArray) { replacements.push({ array: parentArray, index: stmtIndex, stmts: newStmts }); }
       count += exprs.length - 1;
     }
 
@@ -385,7 +385,7 @@ function expandSequences(ast) {
         newStmts.push(t.expressionStatement(exprs[i]));
       }
       newStmts.push(t.returnStatement(exprs[exprs.length - 1]));
-      replacements.push({ array: parentArray, index: stmtIndex, stmts: newStmts });
+      if (parentArray) { replacements.push({ array: parentArray, index: stmtIndex, stmts: newStmts }); }
       count += exprs.length - 1;
     }
 
@@ -401,7 +401,7 @@ function expandSequences(ast) {
           }
           decl.init = exprs[exprs.length - 1];
           newStmts.push(node);
-          replacements.push({ array: parentArray, index: stmtIndex, stmts: newStmts });
+          if (parentArray) { replacements.push({ array: parentArray, index: stmtIndex, stmts: newStmts }); }
           count += exprs.length - 1;
           break; // already handled this VariableDeclaration
         }
@@ -429,16 +429,15 @@ function expandSequences(ast) {
   // Walk all statement lists through the AST
   function walkStmtLists(node) {
     if (!node || typeof node !== "object") return;
-    if (t.isFunction(node)) return;
 
-    // Walk block statement bodies
-    if (t.isBlockStatement(node) && Array.isArray(node.body)) {
+    // Walk block and program statement arrays
+    if ((t.isBlockStatement(node) || node.type === "Program") && Array.isArray(node.body)) {
       collectExpansionsIn(node.body);
     }
-
-    // Walk program body
-    if (node.type === "Program" && Array.isArray(node.body)) {
-      collectExpansionsIn(node.body);
+    // Walk into function bodies (but not the body's bodies — recurse handles that)
+    if (t.isFunction(node)) {
+      if (node.body) walkStmtLists(node.body);
+      return;
     }
 
     for (const key of Object.keys(node)) {
