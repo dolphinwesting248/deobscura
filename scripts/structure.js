@@ -844,7 +844,8 @@ function classifyDomain(filepath) {
     if (/\b(sign\w*(?:V2|Init|Request)?\s*\(|xhsSign|_sign\b|signKey)\b/i.test(src)) tags.push("Signing");
     const apiPaths = (src.match(/\/api\//g) || []).length;
     if (apiPaths > 5) tags.push("API Router");
-    if (/\b(protobuf|protobufjs|\.encode\s*\(|\.decode\s*\(|\.verify\s*\(|\.create\s*\(|\.fromObject\s*\()\b/.test(src)) tags.push("Protobuf");
+    if (/\b(protobuf|protobufjs|\.(?:encode|decode|verify|fromObject|toObject)\s*\()/.test(src) &&
+        !/\b(Text(?:Encoder|Decoder)|encodeURI(?:Component)?|decodeURI(?:Component)?)\b/.test(src)) tags.push("Protobuf");
     if (/\b(websocket|ws\b\.|gateway|socket\.io|Reconnect)|WebSocket\b/i.test(src)) tags.push("WebSocket");
     if (/\bWebGL|canvas\b|sprite\b|texture\b/i.test(src)) tags.push("Graphics");
     if (/\bprototype\s*\.\s*\w+\s*=/.test(src)) tags.push("Prototype-patched");
