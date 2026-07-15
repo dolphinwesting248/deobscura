@@ -3,7 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const { main } = require("./scripts/pipeline");
 const { runMetrics } = require("./scripts/metrics");
-const { runStructure, generateCrossSummary, applyTierFilter, generateIndex, writeReadingGuide, writeCrossReadme } = require("./scripts/structure");
+const { runStructure, generateCrossSummary, applyTierFilter, generateIndex, generatePromptFile, writeCrossReadme } = require("./scripts/structure");
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ function processOneFile(file, outDir, opts) {
 
   const reports = [];
   if (opts.metrics) runMetrics(file, outDir);
-  if (opts.md) { reports.push(runStructure(file, outDir, { brief: true, denoise: opts.denoise })); writeReadingGuide(outDir); }
+  if (opts.md) { reports.push(runStructure(file, outDir, { brief: true, denoise: opts.denoise })); generatePromptFile(outDir); }
   if (opts.index) generateIndex(outDir, { denoise: opts.denoise });
   return reports;
 }
@@ -68,7 +68,7 @@ function processDirectory(inputDir, outputDir, opts) {
   console.log(`Output: ${outputDir}/`);
   if (opts.split) console.log("        (split mode)");
   if (opts.metrics) console.log("        + metrics report");
-  if (opts.md) console.log("        + 1-readme.md, 2-structure.md");
+  if (opts.md) console.log("        + prompt.md, 2-structure.md");
   if (opts.index) console.log("        + 3-index.txt");
 
   const allReports = [];
@@ -102,7 +102,7 @@ function processSingleFile(inputPath, outputDir, opts) {
   console.log(`Output: ${outputDir}/`);
   if (opts.split) console.log("        (split mode)");
   if (opts.metrics) console.log("        + metrics report");
-  if (opts.md) console.log("        + 1-readme.md, 2-structure.md");
+  if (opts.md) console.log("        + prompt.md, 2-structure.md");
   if (opts.index) console.log("        + 3-index.txt");
   if (opts.tier < 3) {
     const s = opts.fold ? " + fold" : "";
@@ -115,7 +115,7 @@ function processSingleFile(inputPath, outputDir, opts) {
   if (opts.tier && opts.tier < 3) applyTierFilter(outputDir, opts.tier, opts.fold);
 
   if (opts.metrics) runMetrics(inputPath, outputDir);
-  if (opts.md) { runStructure(inputPath, outputDir, { denoise: opts.denoise }); writeReadingGuide(outputDir); }
+  if (opts.md) { runStructure(inputPath, outputDir, { denoise: opts.denoise }); generatePromptFile(outputDir); }
   if (opts.index) generateIndex(outputDir, { denoise: opts.denoise });
 }
 
@@ -190,7 +190,7 @@ module.exports = {
   index: true,   // compact index.txt for LLM navigation
 
   // LLM-oriented output tuning
-  tier: 2,        // 1=alerts+hotspots only, 2=+callees, 3=all functions
+  tier: 3,        // 1=alerts+hotspots only, 2=+callees, 3=all functions
   fold: false,    // collapse mechanical functions (polyfill/pure compute/forward) to comments
 
   // Alert denoising — downgrade false-positive alerts.
