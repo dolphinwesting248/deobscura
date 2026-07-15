@@ -131,7 +131,10 @@ const DEFAULT_DENOISE = [
   { match: "github\\.io|mozilla\\.org",   label: "Doc URL",        severity: "low" },
   { match: "localhost|127\\.0\\.0\\.1",   label: "Local URL",      severity: "low" },
   { match: "example\\.com|test\\.com",    label: "Placeholder URL", severity: "low" },
-  { match: "w3\\.org/(svg|Math|XML|xhtml|rdf)", label: "XML Namespace", severity: "info" },
+  // URLs ending in static file extensions → CDN resources, not API endpoints
+  { match: "\\.(js|css|svg|png|jpg|woff2?|ttf|exe|dmg|zip|map|wasm)([?#]|$)", label: "Static File", severity: "low" },
+  // Math.sign in polyfill context → not crypto signing
+  { match: "Math\\.sign|CreateMethodProperty.*sign", label: "Polyfill", severity: "info" },
 ];
 
 function parseConfig(filepath) {
@@ -201,8 +204,10 @@ module.exports = {
     { match: "localhost|127\\\\.0\\\\.0\\\\.1", label: "Local URL", severity: "low" },
     // Placeholder / example domains
     { match: "example\\\\.com|test\\\\.com",  label: "Placeholder URL", severity: "low" },
-    // XML namespace URIs — not real endpoints (React DOM internals)
-    { match: "w3\\\\.org/(svg|Math|XML|xhtml|rdf)", label: "XML Namespace", severity: "info" },
+    // Static file URLs (.js/.css/.exe...) → CDN resources, not API endpoints
+    { match: "\\\\.(js|css|svg|png|jpg|woff2?|ttf|exe|dmg|zip|map|wasm)([?#]|\$)", label: "Static File", severity: "low" },
+    // Math.sign in polyfill context → not crypto signing
+    { match: "Math\\\\.sign|CreateMethodProperty.*sign", label: "Polyfill", severity: "info" },
   ],
 };
 `;
