@@ -154,6 +154,23 @@ function simplify(ast) {
       if ((method === "indexOf" || method === "lastIndexOf") && args.length === 1 && t.isStringLiteral(node.arguments[0])) { strCount++; return t.numericLiteral(obj[method](node.arguments[0].value)); }
     }
 
+    // --- string concat: "a" + "b" → "ab" ---
+    if (t.isBinaryExpression(node) && node.operator === "+" &&
+        t.isStringLiteral(node.left) && t.isStringLiteral(node.right))
+      { strCount++; return t.stringLiteral(node.left.value + node.right.value); }
+
+    // --- array join: ["a","b"].join("") → "ab" ---
+    if (t.isCallExpression(node) && t.isMemberExpression(node.callee) &&
+        t.isIdentifier(node.callee.property, { name: "join" }) &&
+        t.isArrayExpression(node.callee.object) &&
+        node.callee.object.elements.every((e) => t.isStringLiteral(e)) &&
+        node.arguments.length <= 1 &&
+        (!node.arguments[0] || t.isStringLiteral(node.arguments[0]))) {
+      const sep = (node.arguments[0] && node.arguments[0].value) || ",";
+      strCount++;
+      return t.stringLiteral(node.callee.object.elements.map((e) => e.value).join(sep));
+    }
+
     // --- normalize (AST-level): ~arr.indexOf→arr.includes, ~~x→Math.trunc, +x→Number ---
     if (t.isUnaryExpression(node) && node.operator === "~" &&
         t.isCallExpression(node.argument) && t.isMemberExpression(node.argument.callee) &&
