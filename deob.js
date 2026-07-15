@@ -32,12 +32,12 @@ function processOneFile(file, outDir, opts) {
 
   main({ input: file, output: outDir, split: opts.split });
 
-  if (opts.tier && opts.tier < 3) applyTierFilter(outDir, opts.tier, opts.fold);
+  if (opts.tier && opts.tier < 3) applyTierFilter(outDir, opts.tier, opts.fold, opts.denoise);
 
   const reports = [];
   if (opts.metrics) runMetrics(file, outDir);
-  if (opts.md) reports.push(runStructure(file, outDir, { brief: true }));
-  if (opts.index) generateIndex(outDir);
+  if (opts.md) reports.push(runStructure(file, outDir, { brief: true, denoise: opts.denoise }));
+  if (opts.index) generateIndex(outDir, { denoise: opts.denoise });
   return reports;
 }
 
@@ -114,8 +114,8 @@ function processSingleFile(inputPath, outputDir, opts) {
   if (opts.tier && opts.tier < 3) applyTierFilter(outputDir, opts.tier, opts.fold);
 
   if (opts.metrics) runMetrics(inputPath, outputDir);
-  if (opts.md) runStructure(inputPath, outputDir);
-  if (opts.index) generateIndex(outputDir);
+  if (opts.md) runStructure(inputPath, outputDir, { denoise: opts.denoise });
+  if (opts.index) generateIndex(outputDir, { denoise: opts.denoise });
 }
 
 function defaultOutDir(inputPath) {
@@ -124,6 +124,14 @@ function defaultOutDir(inputPath) {
     ? inputPath.replace(/[\\/]$/, "") + ".deob"
     : inputPath.replace(/\.js$/i, ".deob");
 }
+
+// ── Default denoise rules ───────────────────────────────────────────
+const DEFAULT_DENOISE = [
+  { match: "https?://[a-zA-Z](/|$)",     label: "Test URL",       severity: "low" },
+  { match: "github\\.io|mozilla\\.org",   label: "Doc URL",        severity: "low" },
+  { match: "localhost|127\\.0\\.0\\.1",   label: "Local URL",      severity: "low" },
+  { match: "example\\.com|test\\.com",    label: "Placeholder URL", severity: "low" },
+];
 
 function parseConfig(filepath) {
   const absPath = path.resolve(filepath);
@@ -153,14 +161,17 @@ function parseConfig(filepath) {
     index: !!cfg.index,
     tier: cfg.tier != null ? cfg.tier : 3,
     fold: !!cfg.fold,
+    denoise: Array.isArray(cfg.denoise) ? cfg.denoise : DEFAULT_DENOISE,
   };
 }
 
 // ── init command ─────────────────────────────────────────────────────
 const CONFIG_TEMPLATE = `
+/// <reference path="./scripts/config-types.d.ts" />
+
+/** @type {import('./scripts/config-types').DeobConfig} */
 module.exports = {
   // Input: a single file, a directory, or an array of paths
-  // Directory mode processes each .js file and generates a cross-file summary
   input: "src/main.js",
   // input: ["src/a.js", "src/b.js", "src/sub/"],
 
@@ -176,6 +187,15 @@ module.exports = {
   // LLM-oriented output tuning
   tier: 3,        // 1=alerts+hotspots only, 2=+callees, 3=all functions
   fold: false,    // collapse mechanical functions (polyfill/pure compute/forward) to comments
+
+  // Alert denoising — downgrade false-positive alerts (see docs/tier-and-fold.md)
+  // Set to [] to disable all denoising, or remove entries you don't need
+  denoise: [
+    { match: "https?://[a-zA-Z](/|$)",     label: "Test URL",       severity: "low" },
+    { match: "github\\\\.io|mozilla\\\\.org", label: "Doc URL",     severity: "low" },
+    { match: "localhost|127\\\\.0\\\\.0\\\\.1", label: "Local URL", severity: "low" },
+    { match: "example\\\\.com|test\\\\.com",  label: "Placeholder URL", severity: "low" },
+  ],
 };
 `;
 

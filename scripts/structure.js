@@ -1,5 +1,5 @@
 // Structure report: Markdown output of function analysis
-const { parser, t, fs, path, ALERT_PATTERNS, ALERT_DENOISE } = require("./config");
+const { parser, t, fs, path, ALERT_PATTERNS } = require("./config");
 
 // ── Quick Lookup Index ──────────────────────────────────────────────
 
@@ -208,7 +208,8 @@ function analyzeStructureFallback(filepath, code) {
   return report;
 }
 
-function analyzeStructure(filepath) {
+function analyzeStructure(filepath, opts) {
+  const denoise = opts && opts.denoise;
   const code = fs.readFileSync(filepath, "utf-8");
   let ast;
   try {
@@ -417,16 +418,20 @@ function analyzeStructure(filepath) {
     collectStrings(stmt.body);
   }
 
-  // Phase 4b: denoise alerts via configurable rules (ALERT_DENOISE)
-  for (const a of alerts) {
-    if (!a.matches) continue;
-    const url = a.matches[0] || "";
-    // Interpolated URL annotation (always applied)
-    if (/\$\{/.test(url)) a.label = a.label + " (interpolated)";
-    // Config-driven denoising rules
-    for (const rule of ALERT_DENOISE) {
-      if (rule.guard && !rule.guard(url)) continue;
-      if (rule.test.test(url)) { a.severity = rule.severity; a.label = rule.label; break; }
+  // Phase 4b: denoise alerts using configurable rules
+  if (denoise && denoise.length > 0) {
+    for (const a of alerts) {
+      if (!a.matches) continue;
+      const text = a.matches.join(" ");
+      for (const rule of denoise) {
+        try {
+          if (new RegExp(rule.match, "i").test(text)) {
+            a.label = rule.label;
+            if (rule.severity) a.severity = rule.severity;
+            break;
+          }
+        } catch (e) { /* skip invalid regex */ }
+      }
     }
   }
 
@@ -1030,7 +1035,7 @@ function runStructure(input, outputDir, opts) {
     console.log("  Structure report skipped: no output file found");
     return null;
   }
-  const report = analyzeStructure(afterPath);
+  const report = analyzeStructure(afterPath, opts);
   report._filepath = afterPath;
   const outPath = path.join(outputDir, "structure.md");
   const content = generateMarkdown(report, opts);
@@ -1041,13 +1046,13 @@ function runStructure(input, outputDir, opts) {
 
 // ── Compact Index ──────────────────────────────────────────────────
 
-function generateIndex(outputDir) {
+function generateIndex(outputDir, opts) {
   const mainPath = path.join(outputDir, "main.js");
   if (!fs.existsSync(mainPath)) {
     console.log("  Index skipped: no output file found");
     return;
   }
-  const report = analyzeStructure(mainPath);
+  const report = analyzeStructure(mainPath, opts);
   const { summary, functions, alerts, hotspots, lookup, tracePath } = report;
 
   // ── Analyze function source for size / data / hex annotations
@@ -1356,12 +1361,12 @@ module.exports = { analyzeStructure, generateMarkdown, generateIndex, generateCr
 
 // ── Tier Filtering ──────────────────────────────────────────────────
 
-function applyTierFilter(outputDir, tier, fold) {
+function applyTierFilter(outputDir, tier, fold, denoise) {
   const mainPath = path.join(outputDir, "main.js");
   if (!fs.existsSync(mainPath)) return;
 
   // Step 1: run full analysis on current main.js
-  const report = analyzeStructure(mainPath);
+  const report = analyzeStructure(mainPath, { denoise });
 
   // Step 2: determine keep set (signal functions — always kept in full)
   const keep = new Set();
