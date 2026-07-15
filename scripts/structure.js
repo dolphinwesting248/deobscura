@@ -1414,24 +1414,6 @@ function generateCrossSummary(results) {
 
   return `# Cross-File Summary · ${dirName}
 
-## Files (${files.length})
-
-${hasSrcPaths ? `| # | File | Source | Type | Fns | Sub | Orig | Alerts |
-|---|------|--------|------|-----|-----|------|--------|
-${files.map((f, i) => `| ${i + 1} | \`${f.name}\` | \`${f.src}\` | ${f.type} | ${f.total} | ${f.sub} | ${f.orig} | ${f.alerts} |`).join("\n")}` : `| # | File | Type | Fns | Sub | Orig | Alerts |
-|---|------|------|-----|-----|------|--------|
-${files.map((f, i) => `| ${i + 1} | \`${f.name}.js\` | ${f.type} | ${f.total} | ${f.sub} | ${f.orig} | ${f.alerts} |`).join("\n")}`}
-
-## Top Called Functions
-
-${allMostCalled.length > 0 ? `| Rank | File | Function | Callers |
-|------|------|----------|---------|
-${allMostCalled.slice(0, 15).map((m, i) => `| ${i + 1} | \`${m.file}.js\` | \`${m.name}\` | ${m.callers} |`).join("\n")}
-` : "_No call data available._\n"}
-${allRoots.length > 0 ? `### Root Functions (${allRoots.length})
-${allRoots.slice(0, 15).map((r) => `- \`${r.file}.js\` → \`${r.name}\``).join("\n")}
-${allRoots.length > 15 ? `- _+${allRoots.length - 15} more_\n` : ""}
-` : ""}
 ## Keyword Index
 
 ${topLookup.length > 0 ? `| Word | Files & Functions |
