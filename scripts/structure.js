@@ -930,7 +930,7 @@ function generateReadingGuide(report) {
 }
 
 function generateMarkdown(report, opts) {
-  if (report.error) return `# ${report.file} · Structure Report (1/3)\n\n> **${report.error}**\n`;
+  if (report.error) return `# ${report.file} · Structure Report\n\n> **${report.error}**\n`;
   const brief = opts && opts.brief;
   const fallbackNote = report.fallback ? " *(regex-based fallback)*" : "";
   const { file, summary, hotspots, tracePath, alerts, naming, functions } = report;
@@ -938,7 +938,7 @@ function generateMarkdown(report, opts) {
   const tldr = report.tldr || generateTLDR(report);
   const domain = report._filepath ? classifyDomain(report._filepath) : "Unknown";
   const density = computeDensity(functions, file);
-  let result = `# ${file} · Structure Report (1/3)${fallbackNote}
+  let result = `# ${file} · Structure Report${fallbackNote}
 
 > Previous: 0-prompt.md  →  **Now: 1-structure.md**  →  Next: 2-index.txt → jump to main.js
 >
@@ -1137,7 +1137,7 @@ function generateIndex(outputDir, opts) {
   }
 
   const lines = [];
-  lines.push(`# ${report.file} · Function Index (2/2) · ${summary.totalFunctions} functions`);
+  lines.push(`# ${report.file} · Function Index · ${summary.totalFunctions} functions`);
   lines.push("_Previous: 1-structure.md  →  **Now: 2-index.txt**  →  Jump to main.js by line number._");
   lines.push("");
 
