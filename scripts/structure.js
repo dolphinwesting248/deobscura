@@ -265,6 +265,8 @@ function analyzeStructure(filepath) {
         return false;
       }
       detectFlat(stmt.body);
+      // Detect array/object jump-table dispatchers
+      if (!hasFlattening && detectJumpTable(stmt.body)) hasFlattening = true;
       if (hasFlattening) flattenedCount++;
 
       // ── B: cyclomatic complexity ──
@@ -521,6 +523,39 @@ function analyzeStructure(filepath) {
   };
   report.tldr = generateTLDR(report);
   return report;
+}
+
+// ── Semantic Tags ───────────────────────────────────────────────────
+
+// Detect array/object-based jump tables (alternative to while+switch flattening)
+function detectJumpTable(body) {
+  let hasTable = false, hasComputedCall = false;
+
+  function scan(n) {
+    if (!n || typeof n !== "object" || (hasTable && hasComputedCall)) return;
+    if (t.isFunction(n)) return;
+
+    // Large array of function identifiers → potential jump table
+    if (t.isArrayExpression(n) && n.elements.length >= 5 &&
+        n.elements.every((e) => t.isIdentifier(e) || e === null)) hasTable = true;
+
+    // Object with numeric keys → potential jump table
+    if (t.isObjectExpression(n) && n.properties.length >= 5 &&
+        n.properties.every((p) => (t.isNumericLiteral(p.key) || (t.isStringLiteral(p.key) && /^\d+$/.test(p.key.value))))) hasTable = true;
+
+    // Computed member call → dispatch pattern
+    if (t.isCallExpression(n) && t.isMemberExpression(n.callee) && n.callee.computed) hasComputedCall = true;
+
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) scan(x); }
+      else if (v && typeof v.type === "string") scan(v);
+    }
+  }
+  scan(body);
+  return hasTable && hasComputedCall;
 }
 
 // ── Semantic Tags ───────────────────────────────────────────────────
