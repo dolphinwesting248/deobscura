@@ -1316,6 +1316,57 @@ function annotateAlerts(ast) {
   console.log(`  Annotated ${count} functions with security alerts`);
 }
 
+// ---- pushDataToBottom: move DATA-heavy functions to end of file ----
+function pushDataToBottom(ast) {
+  const stmts = ast.program.body;
+  const nonData = [], data = [];
+  for (const s of stmts) {
+    if (!t.isFunctionDeclaration(s) || !s.id) { nonData.push(s); continue; }
+    // Detect DATA-heavy: lines > 400 chars with hex patterns
+    let isData = false;
+    const code = s.loc ? `${s.loc.start.line}-${s.loc.end.line}` : "";
+    function scan(n) {
+      if (!n || typeof n !== "object" || isData) return;
+      // Large string with hex patterns
+      if (t.isStringLiteral(n) && n.value && n.value.length > 400) {
+        if (/0x[0-9a-fA-F]{3,}/.test(n.value)) isData = true;
+      }
+      // Large array of strings (string table)
+      if (t.isArrayExpression(n) && n.elements.length > 20 &&
+          n.elements.every((e) => t.isStringLiteral(e) || t.isNumericLiteral(e))) isData = true;
+      // Large object with string/number entries (hex lookup table)
+      if (t.isObjectExpression(n) && n.properties.length > 20 &&
+          n.properties.every((p) => t.isStringLiteral(p.key) || t.isIdentifier(p.key) || t.isNumericLiteral(p.key))) isData = true;
+      if (t.isFunction(n)) return;
+      for (const k of Object.keys(n)) {
+        if (k === "start" || k === "end" || k === "loc" ||
+            k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+        const v = n[k];
+        if (Array.isArray(v)) { for (const x of v) scan(x); }
+        else if (v && typeof v.type === "string") scan(v);
+      }
+    }
+    scan(s.body);
+    if (isData) data.push(s); else nonData.push(s);
+  }
+
+  if (data.length === 0) { console.log("  No DATA functions to separate"); return; }
+
+  // Add separator comment to first DATA function
+  const firstData = data[0];
+  const sepComment = {
+    type: "CommentBlock",
+    value: ` ${"=".repeat(49)}
+ DATA TABLES · ${data.length} function${data.length > 1 ? "s" : ""} · skip unless you need string decoding
+${"=".repeat(49)} `
+  };
+  if (!firstData.leadingComments) firstData.leadingComments = [];
+  firstData.leadingComments.unshift(sepComment);
+
+  ast.program.body = [...nonData, ...data];
+  console.log(`  Moved ${data.length} DATA functions to bottom`);
+}
+
 module.exports = {
   sanitizeReservedWords,
   hoistDeclarations,
@@ -1332,6 +1383,7 @@ module.exports = {
   normalizeSyntax,
   extractInlineFunctions,
   annotateAlerts,
+  pushDataToBottom,
 };
 
 // ---- inlinePureWrappers: remove functions that are just return call(args) ----
