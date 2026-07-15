@@ -930,7 +930,7 @@ function generateReadingGuide(report) {
 }
 
 function generateMarkdown(report, opts) {
-  if (report.error) return `# ${report.file} · Structure Report (2/3)\n\n> **${report.error}**\n`;
+  if (report.error) return `# ${report.file} · Structure Report (1/3)\n\n> **${report.error}**\n`;
   const brief = opts && opts.brief;
   const fallbackNote = report.fallback ? " *(regex-based fallback)*" : "";
   const { file, summary, hotspots, tracePath, alerts, naming, functions } = report;
@@ -938,9 +938,9 @@ function generateMarkdown(report, opts) {
   const tldr = report.tldr || generateTLDR(report);
   const domain = report._filepath ? classifyDomain(report._filepath) : "Unknown";
   const density = computeDensity(functions, file);
-  let result = `# ${file} · Structure Report (2/3)${fallbackNote}
+  let result = `# ${file} · Structure Report (1/3)${fallbackNote}
 
-> Start with: prompt.md  →  **Now: 2-structure.md**  →  Next: 3-index.txt → jump to main.js
+> Previous: 0-prompt.md  →  **Now: 1-structure.md**  →  Next: 2-index.txt → jump to main.js
 >
 > ${tldr}
 
@@ -1078,14 +1078,14 @@ ${scored.map((f, i) => {
   }).join("\n")}
 
 ## Skip
-${passThrough} pass-through functions (zero logic). See \`3-index.txt\` for full function catalog.
+${passThrough} pass-through functions (zero logic). See \`2-index.txt\` for full function catalog.
 
-## How to Read
-1. **Do NOT read main.js sequentially.** Use line numbers above to jump to specific functions.
-2. Call graph and naming convention: see \`2-structure.md\`.
-3. Full function catalog with line numbers: see \`3-index.txt\`.
+## Reading Path
+1. **This file** (0-prompt.md) — architecture, alerts, top 5 functions to start with
+2. **1-structure.md** — call graph, hotspots, full alert traces, naming convention
+3. **2-index.txt** — function catalog with line numbers → jump to \`main.js\`
 `;
-  const outPath = path.join(outputDir, "prompt.md");
+  const outPath = path.join(outputDir, "0-prompt.md");
   fs.writeFileSync(outPath, content, "utf-8");
   console.log(`  prompt: ${outPath}`);
 }
@@ -1098,10 +1098,10 @@ function runStructure(input, outputDir, opts) {
   }
   const report = analyzeStructure(afterPath, opts);
   report._filepath = afterPath;
-  const outPath = path.join(outputDir, "2-structure.md");
+  const outPath = path.join(outputDir, "1-structure.md");
   const content = generateMarkdown(report, opts);
   fs.writeFileSync(outPath, content, "utf-8");
-  console.log(`  2-structure: ${outPath}`);
+  console.log(`  1-structure: ${outPath}`);
   return report;
 }
 
@@ -1137,8 +1137,8 @@ function generateIndex(outputDir, opts) {
   }
 
   const lines = [];
-  lines.push(`# ${report.file} · Function Index (3/3) · ${summary.totalFunctions} functions`);
-  lines.push("_Start: prompt.md → Previous: 2-structure.md  →  **Now: 3-index.txt**  →  Jump to main.js by line number._");
+  lines.push(`# ${report.file} · Function Index (2/2) · ${summary.totalFunctions} functions`);
+  lines.push("_Previous: 1-structure.md  →  **Now: 2-index.txt**  →  Jump to main.js by line number._");
   lines.push("");
 
   // Entry points
@@ -1243,9 +1243,9 @@ function generateIndex(outputDir, opts) {
     lines.push("");
   }
 
-  const outPath = path.join(outputDir, "3-index.txt");
+  const outPath = path.join(outputDir, "2-index.txt");
   fs.writeFileSync(outPath, lines.join("\n"), "utf-8");
-  console.log(`  3-index: ${outPath}`);
+  console.log(`  2-index: ${outPath}`);
 }
 
 function categorizeFn(name, fn, meta) {
@@ -1298,7 +1298,7 @@ function writeCrossReadme(outputDir, allReports) {
   const lines = [];
   lines.push(`# Cross-File Analysis Entry (0) · ${allReports.length} files`);
   lines.push("");
-  lines.push("> **Now: 0-readme.md** → Next: pick a file below → Read its 1-readme.md → 2-structure.md → 3-index.txt → jump to main.js");
+  lines.push("> **Now: 0-readme.md** → Next: pick a file below → Read its 0-prompt.md → 1-structure.md → 2-index.txt → jump to main.js");
   lines.push("");
 
   // Priority-ranked file list
@@ -1328,7 +1328,7 @@ function writeCrossReadme(outputDir, allReports) {
   lines.push("");
   lines.push("1. Scan the table above — pick files marked **Read**");
   lines.push("2. Enter the file's subdirectory");
-  lines.push("3. Read `1-readme.md` → `2-structure.md` → `3-index.txt` → jump to `main.js`");
+  lines.push("3. Read `0-prompt.md` → `1-structure.md` → `2-index.txt` → jump to `main.js`");
   lines.push("4. Repeat for each file you need");
   lines.push("");
   lines.push("---");

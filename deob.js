@@ -68,8 +68,8 @@ function processDirectory(inputDir, outputDir, opts) {
   console.log(`Output: ${outputDir}/`);
   if (opts.split) console.log("        (split mode)");
   if (opts.metrics) console.log("        + metrics report");
-  if (opts.md) console.log("        + prompt.md, 2-structure.md");
-  if (opts.index) console.log("        + 3-index.txt");
+  if (opts.md) console.log("        + 0-prompt.md, 1-structure.md");
+  if (opts.index) console.log("        + 2-index.txt");
 
   const allReports = [];
 
@@ -102,8 +102,8 @@ function processSingleFile(inputPath, outputDir, opts) {
   console.log(`Output: ${outputDir}/`);
   if (opts.split) console.log("        (split mode)");
   if (opts.metrics) console.log("        + metrics report");
-  if (opts.md) console.log("        + prompt.md, 2-structure.md");
-  if (opts.index) console.log("        + 3-index.txt");
+  if (opts.md) console.log("        + 0-prompt.md, 1-structure.md");
+  if (opts.index) console.log("        + 2-index.txt");
   if (opts.tier < 3) {
     const s = opts.fold ? " + fold" : "";
     console.log(`        (tier ${opts.tier}${s} output)`);
