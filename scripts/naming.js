@@ -6,9 +6,13 @@ function cleanName(name) {
   return cleaned;
 }
 
-function subName(parentName, seq, hint) {
+function subName(parentName, seq, hint, sourceNode) {
   const s = String(seq).padStart(2, "0");
-  const clean = cleanName(parentName);
+  let clean = cleanName(parentName);
+  // Disambiguate short parent names (single-char like i, l, r) with line number
+  if (clean.length < 3 && sourceNode && sourceNode.loc) {
+    clean = clean + "_ln" + sourceNode.loc.start.line;
+  }
   return `_sub_${clean}_${s}_${hint || "fn"}`;
 }
 

@@ -1068,7 +1068,9 @@ function extractInlineFunctions(ast) {
         if (decl.init && (t.isFunctionExpression(decl.init) || t.isArrowFunctionExpression(decl.init)) &&
             t.isBlockStatement(decl.init.body) && decl.init.body.body.length > 0) {
           const varName = t.isIdentifier(decl.id) ? decl.id.name : `var${count}`;
-          const name = `_sub_${varName}_fn`;
+          // Disambiguate short names with line number
+          const dSuffix = varName.length < 3 && decl.loc ? "_ln" + decl.loc.start.line : "";
+          const name = `_sub_${varName}${dSuffix}_fn`;
           const fn = decl.init;
           const params = fn.params.map((p) => cloneParam(p));
           const vFn = t.functionDeclaration(t.identifier(name), params, fn.body);

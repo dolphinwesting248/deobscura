@@ -55,7 +55,7 @@ function extractIIFE(stmt, parentName, seq) {
   const call = stmt.expression;
   const fn = call.callee;
   const body = fn.body.body;
-  const name = subName(parentName, seq, descIIFE(body));
+  const name = subName(parentName, seq,descIIFE(body), fn);
 
   const iifeParamNames = new Set(fn.params.map((p) => (t.isIdentifier(p) ? p.name : null)).filter(Boolean));
   const defined = collectDefined(body);
@@ -79,7 +79,7 @@ function extractTryCatch(stmt, parentName, seq) {
   const subFns = [];
   const tryDefined = collectDefined(stmt.block.body);
   const tryRefs = getExternalRefs(stmt.block, tryDefined);
-  const tryName = subName(parentName, seq, "try");
+  const tryName = subName(parentName, seq,"try");
   const tryProc = processBody(stmt.block.body, tryName);
   const trySub = createSubFn(tryName, tryRefs.map((r) => t.identifier(safeParam(r))), tryProc.newBody, stmt.block);
   subFns.push(trySub, ...tryProc.subFns);
@@ -90,7 +90,7 @@ function extractTryCatch(stmt, parentName, seq) {
     const catchDefined = collectDefined(stmt.handler.body.body);
     if (param && t.isIdentifier(param)) catchDefined.add(param.name);
     const catchRefs = getExternalRefs(stmt.handler.body, catchDefined);
-    const catchName = subName(parentName, seq, "catch");
+    const catchName = subName(parentName, seq,"catch");
     const cProc = processBody(stmt.handler.body.body, catchName);
     const cSub = createSubFn(catchName, [...(param ? [clone(param)] : []), ...catchRefs.map((r) => t.identifier(safeParam(r)))], cProc.newBody, stmt.handler.body);
     subFns.push(cSub, ...cProc.subFns);
@@ -111,7 +111,7 @@ function extractLoop(stmt, parentName, seq) {
   if (!t.isBlockStatement(body) || body.body.length === 0) return null;
   if (hasBail(body)) return null;
 
-  const name = subName(parentName, seq, describeBody(body.body));
+  const name = subName(parentName, seq, describeBody(body.body), body);
   const defined = collectDefined(body.body);
   const refs = getExternalRefs(body, defined);
   const proc = processBody(body.body, name);
@@ -139,7 +139,7 @@ function extractIfElse(stmt, parentName, seq) {
   const cHasReturn = hasReturn(cBlock);
   const cDefined = collectDefined(cStmts);
   const cRefs = getExternalRefs(cBlock, cDefined);
-  const ifName = subName(parentName, seq, "if");
+  const ifName = subName(parentName, seq,"if");
   const cProc = processBody(cStmts, ifName);
   const cFn = createSubFn(ifName, cRefs.map((r) => t.identifier(safeParam(r))), cProc.newBody, cBlock);
   subFns.push(cFn, ...cProc.subFns);
@@ -159,7 +159,7 @@ function extractIfElse(stmt, parentName, seq) {
       const aHasReturn = hasReturn(altBlock);
       const aDefined = collectDefined(aStmts);
       const aRefs = getExternalRefs(altBlock, aDefined);
-      const elseName = subName(parentName, seq, "else");
+      const elseName = subName(parentName, seq,"else");
       const aProc = processBody(aStmts, elseName);
       const aFn = createSubFn(elseName, aRefs.map((r) => t.identifier(safeParam(r))), aProc.newBody, altBlock);
       subFns.push(aFn, ...aProc.subFns);
@@ -203,7 +203,7 @@ function extractCallbacks(stmt, parentName, seq) {
   const subFns = [];
   for (let i = infos.length - 1; i >= 0; i--) {
     const info = infos[i];
-    const cbName = subName(parentName, seq, info.hint || "cb");
+    const cbName = subName(parentName, seq,info.hint || "cb");
     const fn = info.fn;
     let stmts = t.isBlockStatement(fn.body) ? fn.body.body : [t.returnStatement(fn.body)];
     const proc = processBody(stmts, cbName);
@@ -292,7 +292,7 @@ function tryExtractVarIIFE(stmt, parentName, seq) {
     if (decl.init && isIIFE(decl.init) && t.isFunctionExpression(decl.init.callee)) {
       changed = true;
       const hint = descIIFE(decl.init.callee.body.body);
-      const fnName = subName(parentName, seq, hint);
+      const fnName = subName(parentName, seq,hint);
       const initProc = processBody(decl.init.callee.body.body, fnName);
       const subFn = createSubFn(fnName, decl.init.callee.params.map((p) => clone(p)), initProc.newBody, decl.init);
       extraSubs.push(subFn, ...initProc.subFns);
