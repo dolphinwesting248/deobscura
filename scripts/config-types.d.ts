@@ -1,10 +1,4 @@
-// Type definitions for deob.config.js
-// No runtime dependency — used only for IDE IntelliSense via JSDoc @type annotation.
-//
-// Resolved via `npm link` + package.json "types" field.
-// Without npm link, copy this file alongside your deob.config.js and add:
-//   /// <reference path="./deob.config-types.d.ts" />
-//   /** @type {import('./deob.config-types').DeobConfig} */
+// Type definitions for deob.config.js — resolved via npm link + package.json "types" field
 
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
 

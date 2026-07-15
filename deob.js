@@ -202,9 +202,6 @@ module.exports = {
     { match: "example\\\\.com|test\\\\.com",  label: "Placeholder URL", severity: "low" },
   ],
 };
-// If IDE has no IntelliSense here, copy scripts/config-types.d.ts alongside this file:
-//   /// <reference path="./deob.config-types.d.ts" />
-//   /** @type {import('./deob.config-types').DeobConfig} */
 `;
 
 function initConfig(force) {
@@ -215,10 +212,6 @@ function initConfig(force) {
   }
   fs.writeFileSync(target, CONFIG_TEMPLATE, "utf-8");
   console.log(`Created ${target}`);
-  // Copy type definitions alongside config for IDE IntelliSense fallback
-  const typesDest = path.resolve("deob.config-types.d.ts");
-  const typesSrc = path.join(__dirname, "scripts", "config-types.d.ts");
-  try { fs.copyFileSync(typesSrc, typesDest); console.log(`Created ${typesDest}`); } catch (e) {}
 }
 
 // ── CLI parsing ──────────────────────────────────────────────────────

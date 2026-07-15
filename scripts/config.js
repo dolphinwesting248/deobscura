@@ -36,16 +36,4 @@ const ALERT_PATTERNS = [
   { label: "Config Field", regex: /\b(?:baseURL|baseUrl|timeout|maxRetries|maxSize|maxLength|maxConcurrency|maxConnections)\b/gi, severity: "low" },
 ];
 
-// Alert denoising rules — applied after pattern matching to downgrade false positives.
-// Each rule: { test: regex, severity: "low", label: "New Label" }
-// Rules are evaluated in order; first match wins.
-const ALERT_DENOISE = [
-  { test: /github\.io|developer\.mozilla\.org|npmjs\.com|nodejs\.org|w3\.org/i, severity: "low", label: "Doc URL" },
-  { test: /localhost|127\.0\.0\.1|\[::1\]/, severity: "low", label: "Local URL" },
-  { test: /example\.com|test\.com|myapp\.com|acme\.com/i, severity: "low", label: "Placeholder URL" },
-  { test: /https?:\/\/[a-zA-Z](?:\/|$)/, severity: "low", label: "Test URL",
-    // Only match if it's NOT a real multi-char hostname
-    guard: (url) => !/https?:\/\/[a-zA-Z]{2,}/.test(url) },
-];
-
-module.exports = { parser, generate, t, fs, path, GLOBALS, ALERT_PATTERNS, ALERT_DENOISE };
+module.exports = { parser, generate, t, fs, path, GLOBALS, ALERT_PATTERNS };

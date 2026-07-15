@@ -64,14 +64,14 @@ A token-optimized function catalog in custom text format, designed for LLM consu
 
 | Section | Content |
 |---------|---------|
-| `## entry` | Entry point functions with calls and flags |
-| `## alerts` | Alert-annotated functions with matched patterns |
-| `## hot` | Most-called functions ranked by incoming edges |
-| `## lookup` | Word → function mapping (semantic keywords only) |
-| `## trace` | Longest call path through the graph |
-| `## suspicious` | Functions with suspicious patterns (eval, computed key, __proto__) |
-| `## flat` | Functions with control-flow flattening |
-| `## fn/*` | All functions grouped by category (core / branch / callback / data / network / crypto / parser / i18n / websocket / polyfill / filesystem / other) |
+| `entry` | Entry point functions with calls and flags |
+| `alerts` | Alert-annotated functions with matched patterns |
+| `hot` | Most-called functions ranked by incoming edges |
+| `lookup` | Word → function mapping (semantic keywords only) |
+| `trace` | Longest call path through the graph |
+| `suspicious` | Functions with suspicious patterns (eval, computed key, \__proto__) |
+| `flat` | Functions with control-flow flattening |
+| `fn/*` | All functions grouped by category (core / branch / callback / data / network / crypto / parser / i18n / websocket / polyfill / filesystem / other) |
 
 Each `fn/*` entry includes: size triplets (`lines/stmts/params`), semantic tags, function descriptions, and flags (`DATA`, `FLAT`).
 
