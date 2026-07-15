@@ -1218,7 +1218,7 @@ function generateIndex(outputDir, opts) {
     if (!groups[cat]) groups[cat] = [];
     groups[cat].push(f);
   }
-  const groupLabels = { core: "Core runtime", branch: "Branches", callback: "Callbacks", data: "Data tables", network: "Network", websocket: "WebSocket", crypto: "Crypto", parser: "Parser", i18n: "i18n", polyfill: "Polyfill", filesystem: "Filesystem", timer: "Timers", construct: "Constructors", delegate: "Delegates", varargs: "Varargs", other: "Other" };
+  const groupLabels = { core: "Core runtime", branch: "Branches", callback: "Callbacks", data: "Data tables", network: "Network", websocket: "WebSocket", crypto: "Crypto", parser: "Parser", i18n: "i18n", polyfill: "Polyfill", filesystem: "Filesystem", timer: "Timers", construct: "Constructors", delegate: "Delegates", varargs: "Varargs", boilerplate: "Webpack boilerplate", other: "Other" };
 
   for (const [cat, fns] of Object.entries(groups)) {
     if (fns.length === 0) continue;
@@ -1276,6 +1276,8 @@ function categorizeFn(name, fn, meta) {
   if (desc.includes("factory") || desc.includes("construct")) return "construct";
   if (desc.includes("pass-through") || desc.includes("returns arg") || desc.includes("calls expr")) return "delegate";
   if (/arguments\[/.test((fn.suspicious || []).join(" "))) return "varargs";
+  // Webpack/rspack boilerplate: __esModule, Object.defineProperty wrappers, module-map entries
+  if (/\b(__esModule|Object\.defineProperty|d\s*\(\s*exports|exports\s*\[)\b/.test(src)) return "boilerplate";
 
   return "other";
 }

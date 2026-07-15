@@ -132,6 +132,8 @@ const DEFAULT_DENOISE = [
   { match: "github\\.io|mozilla\\.org",   label: "Doc URL",        severity: "low" },
   { match: "localhost|127\\.0\\.0\\.1",   label: "Local URL",      severity: "low" },
   { match: "example\\.com|test\\.com",    label: "Placeholder URL", severity: "low" },
+  // XML/schema namespace URIs (w3.org, schema.org, xmlns) — not API endpoints
+  { match: "w3\\.org/|schema\\.org/|xmlns\\.com/", label: "Namespace URI", severity: "info" },
   // URLs ending in static file extensions → CDN resources, not API endpoints
   { match: "\\.(js|css|svg|png|jpg|woff2?|ttf|exe|dmg|zip|map|wasm)([?#]|$)", label: "Static File", severity: "low" },
   // Math.sign in polyfill context → not crypto signing
@@ -205,6 +207,8 @@ module.exports = {
     { match: "localhost|127\\\\.0\\\\.0\\\\.1", label: "Local URL", severity: "low" },
     // Placeholder / example domains
     { match: "example\\\\.com|test\\\\.com",  label: "Placeholder URL", severity: "low" },
+    // XML/schema namespace URIs — not real API endpoints
+    { match: "w3\\\\.org/|schema\\\\.org/|xmlns\\\\.com/", label: "Namespace URI", severity: "info" },
     // Static file URLs (.js/.css/.exe...) → CDN resources, not API endpoints
     { match: "\\\\.(js|css|svg|png|jpg|woff2?|ttf|exe|dmg|zip|map|wasm)([?#]|\$)", label: "Static File", severity: "low" },
     // Math.sign in polyfill context → not crypto signing
