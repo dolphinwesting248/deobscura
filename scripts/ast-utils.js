@@ -119,10 +119,29 @@ const hasSuperCall = (node) => containsNodeType(node, "Super");
 const hasBail = (node) => containsNodeType(node, ["BreakStatement", "ContinueStatement"]);
 const hasReturn = (node) => containsNodeType(node, "ReturnStatement");
 const containsAwait = (node) => containsNodeType(node, "AwaitExpression");
+const containsYield = (node) => containsNodeType(node, "YieldExpression");
+const containsForAwait = (node) => {
+  let found = false;
+  function scan(n) {
+    if (!n || typeof n !== "object" || found) return;
+    if (n.type === "ForOfStatement" && n.await) { found = true; return; }
+    if (n.type && (n.type.endsWith("Function") || n.type.endsWith("FunctionExpression") || n.type === "ArrowFunctionExpression")) return;
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) scan(x); }
+      else if (v && typeof v.type === "string") scan(v);
+    }
+  }
+  scan(node);
+  return found;
+};
 
 module.exports = {
   walkAST, walkASTDeep, walkStmtLists,
   containsNodeType, containsNodeTypeDeep,
   isIIFE, describeBody, descIIFE, clone,
   hasSuperCall, hasBail, hasReturn, containsAwait,
+  containsYield, containsForAwait,
 };

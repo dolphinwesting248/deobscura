@@ -1,5 +1,5 @@
 const { t } = require("./config");
-const { containsAwait } = require("./ast-utils");
+const { containsAwait, containsYield, containsForAwait } = require("./ast-utils");
 
 // ---- Line-range comment on extracted sub-functions ----
 function addLineComment(fnNode, sourceNode) {
@@ -38,7 +38,8 @@ function createSubFn(name, params, body, sourceNode) {
     safeParams,
     t.isBlockStatement(body) ? body : t.blockStatement(body),
   );
-  if (containsAwait(fn.body)) fn.async = true;
+  if (containsAwait(fn.body) || containsForAwait(fn.body)) fn.async = true;
+  if (containsYield(fn.body)) fn.generator = true;
   addLineComment(fn, sourceNode);
   return fn;
 }

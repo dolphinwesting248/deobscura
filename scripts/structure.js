@@ -1,4 +1,4 @@
-// Structure report: Markdown or JSON output of function inventory + call graph
+// Structure report: Markdown output of function analysis
 const { parser, t, fs, path, ALERT_PATTERNS } = require("./config");
 
 // ── Quick Lookup Index ──────────────────────────────────────────────
@@ -26,7 +26,7 @@ function splitWords(name) {
 }
 
 function buildLookupIndex(fns) {
-  const STOP = new Set(["sub", "fn", "ln", "var", "val", "body", "block", "case", "iife", "if", "else"]);
+  const STOP = new Set(["sub", "fn", "ln", "var", "val", "body", "block", "case", "iife", "if", "else", "return", "undefined", "null"]);
   const index = new Map(); // word → [fn names]
 
   for (const f of fns) {
@@ -180,7 +180,7 @@ function analyzeStructureFallback(filepath, code) {
 
   const lookup = buildLookupIndex(fns);
 
-  return {
+  const report = {
     file,
     error: null,
     fallback: true,
@@ -204,6 +204,8 @@ function analyzeStructureFallback(filepath, code) {
     },
     functions: fns,
   };
+  report.tldr = generateTLDR(report);
+  return report;
 }
 
 function analyzeStructure(filepath) {
@@ -328,7 +330,8 @@ function analyzeStructure(filepath) {
       if (suspicious.length > 0) suspiciousCount++;
 
       fns.push({ name, lines, params, bodyLen: bl, calls: [], calledBy: [], comment,
-        complexity, flat: hasFlattening, suspicious: [...new Set(suspicious)] });
+        complexity, flat: hasFlattening, suspicious: [...new Set(suspicious)],
+        semanticTags: detectSemanticTags(name, stmt), description: describeFn(stmt.body, bl) });
       nameMap.set(name, fns.length - 1);
     }
   }
@@ -408,7 +411,7 @@ function analyzeStructure(filepath) {
         else if (v && typeof v.type === "string") collectStrings(v);
       }
     }
-    collectStrings(stmt);
+    collectStrings(stmt.body);
   }
 
   // Phase 5: hotspots — function heat rankings
@@ -453,7 +456,7 @@ function analyzeStructure(filepath) {
 
   const lookup = buildLookupIndex(fns);
 
-  return {
+  const report = {
     file: path.basename(filepath),
     summary: {
       totalFunctions: fns.length,
@@ -493,21 +496,264 @@ function analyzeStructure(filepath) {
       },
     },
     functions: fns,
+    alertTraces: computeAlertTraces(fns, alerts, roots),
   };
+  report.tldr = generateTLDR(report);
+  return report;
 }
 
-function generateMarkdown(report) {
-  if (report.error) return `# Structure Report · ${report.file}\n\n> **${report.error}**\n`;
-  const fallbackNote = report.fallback ? " *(regex-based fallback)*" : "";
-  const { file, summary, lookup, hotspots, tracePath, alerts, naming, functions } = report;
-  const typeTable = Object.entries(summary.byType).map(([k, v]) => `| ${k} | ${v} |`).join("\n");
+// ── Semantic Tags ───────────────────────────────────────────────────
 
-  return `# Structure Report · ${file}${fallbackNote}
+function detectSemanticTags(name, stmt) {
+  const tags = [];
+  const body = stmt.body;
+  if (!t.isBlockStatement(body)) return tags;
+
+  // Self-modifying: fn = function... or fn = _sub_...
+  let selfMod = false;
+  let propSetters = 0; let hasRegex = false; let hasBigArray = false;
+  let buildCount = 0;
+
+  function scan(n) {
+    if (!n || typeof n !== "object") return;
+    if (t.isFunction(n) && n !== stmt) return;
+
+    // Self-modifying: fnName = function_expression
+    if (t.isAssignmentExpression(n) && n.operator === "=" &&
+        t.isIdentifier(n.left) && n.left.name === name) selfMod = true;
+
+    // Property setters: this.X = ... or obj.X = ...
+    if (t.isAssignmentExpression(n) &&
+        t.isMemberExpression(n.left) && !n.left.computed) propSetters++;
+
+    // Regex literals
+    if (t.isRegExpLiteral(n)) hasRegex = true;
+
+    // Large arrays
+    if (t.isArrayExpression(n) && n.elements.length > 20) hasBigArray = true;
+
+    // Object building: { key: val, ... } inside return or assignment
+    if (t.isObjectExpression(n) && n.properties.length > 5) buildCount++;
+
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) scan(x); }
+      else if (v && typeof v.type === "string") scan(v);
+    }
+  }
+  scan(body);
+
+  if (selfMod) tags.push("self-modifying");
+  if (t.isWhileStatement(body.body[0]) || t.isForStatement(body.body[0])) {
+    // Check for while+switch deeper
+    function hasSwitch(n) {
+      if (!n || typeof n !== "object") return false;
+      if (t.isSwitchStatement(n)) return true;
+      if (t.isFunction(n) && n !== stmt) return false;
+      for (const k of Object.keys(n)) {
+        if (k === "start" || k === "end" || k === "loc" ||
+            k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+        const v = n[k];
+        if (Array.isArray(v)) { for (const x of v) { if (hasSwitch(x)) return true; } }
+        else if (v && typeof v.type === "string") { if (hasSwitch(v)) return true; }
+      }
+      return false;
+    }
+    if (hasSwitch(body)) tags.push("dispatcher");
+  }
+  if (propSetters >= 5) tags.push("config");
+  if (buildCount >= 2) tags.push("table-init");
+  if (hasBigArray) tags.push("table-init");
+  if (hasRegex && propSetters >= 2) tags.push("integrity-check");
+  if (name.startsWith("_sub_program")) tags.push("module-init");
+
+  return tags;
+}
+
+function describeFn(body, stmtCount) {
+  if (!t.isBlockStatement(body)) return "";
+  const stmts = body.body;
+  if (stmtCount === 0) { return stmts.length <= 1 ? "[pass-through]" : `[void, ${stmts.length}S]`; }
+
+  // Count returns
+  let returnCount = 0, lastReturn = null;
+  function findReturns(n) {
+    if (!n || typeof n !== "object") return;
+    if (t.isReturnStatement(n) && n.argument) { returnCount++; lastReturn = n.argument; }
+    if (t.isFunction(n)) return;
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) findReturns(x); }
+      else if (v && typeof v.type === "string") findReturns(v);
+    }
+  }
+  findReturns(body);
+
+  if (returnCount > 1) return `[returns via ${returnCount} paths]`;
+  if (returnCount === 0) return `[void, ${stmtCount}S]`;
+
+  const ret = lastReturn;
+  if (t.isCallExpression(ret) && t.isIdentifier(ret.callee)) return `[calls → ${ret.callee.name}]`;
+  if (t.isCallExpression(ret)) return `[calls expr]`;
+  if (t.isIdentifier(ret)) return `[returns arg]`;
+  if (t.isStringLiteral(ret)) return `[returns str]`;
+  if (t.isNumericLiteral(ret)) return `[returns num]`;
+  if (t.isBooleanLiteral(ret)) return `[returns bool]`;
+  if (t.isConditionalExpression(ret)) return `[returns conditional]`;
+  if (t.isBinaryExpression(ret)) return `[returns expr]`;
+  if (t.isMemberExpression(ret)) return `[returns prop]`;
+  if (t.isArrayExpression(ret)) return `[returns array]`;
+  if (t.isObjectExpression(ret)) return `[returns object]`;
+  return `[returns value]`;
+}
+
+// ── Alert Trace ────────────────────────────────────────────────────
+
+function computeAlertTraces(fns, alerts, roots) {
+  if (!alerts.length || !roots.length) return [];
+  const nameIdx = new Map(fns.map((f, i) => [f.name, i]));
+  const traces = [];
+
+  for (const a of alerts) {
+    let shortest = null;
+    for (const root of roots) {
+      const path = bfsPath(root.name, a.fn, nameIdx, fns);
+      if (path && (!shortest || path.length < shortest.length)) shortest = path;
+    }
+    if (shortest && shortest.length > 1) {
+      traces.push({ fn: a.fn, label: a.label, path: shortest });
+    }
+  }
+  // Deduplicate by fn
+  const seen = new Set();
+  return traces.filter((t) => {
+    const key = t.fn + t.label;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 20);
+}
+
+function bfsPath(from, to, nameIdx, fns) {
+  if (from === to) return [from];
+  const visited = new Set([from]);
+  const queue = [[from]];
+  while (queue.length > 0) {
+    const path = queue.shift();
+    const last = path[path.length - 1];
+    const fn = fns[nameIdx.get(last)];
+    if (!fn) continue;
+    for (const callee of (fn.calls || [])) {
+      if (callee === to) return [...path, to];
+      if (!visited.has(callee)) {
+        visited.add(callee);
+        queue.push([...path, callee]);
+      }
+    }
+  }
+  return null;
+}
+
+// ── TL;DR Summary ──────────────────────────────────────────────────
+
+function generateTLDR(report) {
+  const { summary, hotspots, alerts } = report;
+  const parts = [];
+
+  parts.push(`${summary.totalFunctions} functions`);
+  if (summary.subFunctions > 0) parts.push(`(${summary.subFunctions} extracted sub-fns, ${summary.originalFunctions} original)`);
+
+  if (alerts && alerts.length > 0) {
+    const bySev = {};
+    for (const a of alerts) {
+      bySev[a.severity] = (bySev[a.severity] || 0) + 1;
+    }
+    const sevParts = [];
+    if (bySev.critical) sevParts.push(`${bySev.critical} critical`);
+    if (bySev.high) sevParts.push(`${bySev.high} high`);
+    if (bySev.medium) sevParts.push(`${bySev.medium} medium`);
+    if (sevParts.length > 0) parts.push(`${sevParts.join(", ")} alerts`);
+  }
+
+  if (summary.flattened > 0) parts.push(`${summary.flattened} flattened (while+switch)`);
+  if (summary.suspicious > 0) parts.push(`${summary.suspicious} suspicious patterns`);
+  if (summary.maxComplexity > 10) parts.push(`max complexity ${summary.maxComplexity}`);
+
+  if (hotspots && hotspots.roots && hotspots.roots.length > 0) {
+    parts.push(`${hotspots.roots.length} entry point${hotspots.roots.length > 1 ? "s" : ""}`);
+  }
+
+  return parts.join(" · ");
+}
+
+// ── Signal Density ────────────────────────────────────────────────
+
+function computeDensity(functions, file) {
+  if (functions.length === 0) return "N/A";
+  const totalFnLines = functions.reduce((s, f) => {
+    return s + (f.lines[0] && f.lines[1] ? f.lines[1] - f.lines[0] + 1 : 0);
+  }, 0);
+  // Estimate total lines from the last function's end line
+  const lastFn = functions[functions.length - 1];
+  const totalLines = lastFn.lines[1] || 100;
+  const pct = Math.round((totalFnLines / totalLines) * 100);
+  return `${pct}% active code, ${100 - pct}% data/other`;
+}
+
+// ── Domain Classification ─────────────────────────────────────────
+
+function classifyDomain(filepath) {
+  try {
+    const src = fs.readFileSync(filepath, "utf-8");
+    const tags = [];
+    // Bundlers — check FIRST, take priority
+    if (/\bself\.(rspack|webpack)(Chunk|_require_)/.test(src)) tags.push("rspack/webpack chunk");
+    else if (/\b__webpack_require__\b|\b__webpack_modules__\b/.test(src)) tags.push("webpack bundle");
+    if (/\bmodule\.exports\b|\bexports\[/.test(src) && /\brequire\s*\(/.test(src)) tags.push("CommonJS");
+    if (/\bdefine\s*\(\s*(['"]|function)/.test(src)) tags.push("AMD");
+    if (/\bprocess\.(?!env)/.test(src)) tags.push("Node.js");
+    if (/\bwindow\b|\bdocument\.|\baddEventListener\b/.test(src)) tags.push("Browser DOM");
+    if (/\bfetch\s*\(|\bXMLHttpRequest\b|\baxios\b/.test(src)) tags.push("Network");
+    if (/\b(crypto|encrypt|decrypt|hmac|md5|sha\d+)\b/i.test(src)) tags.push("Crypto");
+    // Specific domain signatures
+    if (/\b(sign\w*(?:V2|Init|Request)?\s*\(|xhsSign|_sign\b|signKey)\b/i.test(src)) tags.push("Signing");
+    const apiPaths = (src.match(/\/api\//g) || []).length;
+    if (apiPaths > 5) tags.push("API Router");
+    if (/\b(protobuf|protobufjs|\.encode\s*\(|\.decode\s*\(|\.verify\s*\(|\.create\s*\(|\.fromObject\s*\()\b/.test(src)) tags.push("Protobuf");
+    if (/\b(websocket|ws\b\.|gateway|socket\.io|Reconnect)|WebSocket\b/i.test(src)) tags.push("WebSocket");
+    if (/\bWebGL|canvas\b|sprite\b|texture\b/i.test(src)) tags.push("Graphics");
+    if (/\bprototype\s*\.\s*\w+\s*=/.test(src)) tags.push("Prototype-patched");
+    const evals = (src.match(/\beval\s*\(/g) || []).length;
+    if (evals > 5) tags.push("Eval-heavy");
+    return tags.length > 0 ? tags.join(" + ") : "General JS";
+  } catch (e) {
+    return "Unknown";
+  }
+}
+
+function generateMarkdown(report, opts) {
+  if (report.error) return `# Structure Report · ${report.file}\n\n> **${report.error}**\n`;
+  const brief = opts && opts.brief;
+  const fallbackNote = report.fallback ? " *(regex-based fallback)*" : "";
+  const { file, summary, hotspots, tracePath, alerts, naming, functions } = report;
+
+  const tldr = report.tldr || generateTLDR(report);
+  const domain = report._filepath ? classifyDomain(report._filepath) : "Unknown";
+  const density = computeDensity(functions, file);
+
+  let result = `# Structure Report · ${file}${fallbackNote}
+
+> ${tldr}
 
 ## Summary
 
 | Metric | Value |
 |--------|-------|
+| Domain | ${domain} |
 | Total functions | ${summary.totalFunctions} |
 | Sub-functions | ${summary.subFunctions} |
 | Original functions | ${summary.originalFunctions} |
@@ -515,6 +761,7 @@ function generateMarkdown(report) {
 | Max complexity | ${summary.maxComplexity || "-"} |
 | Flattened (susp.) | ${summary.flattened || 0} |
 | Suspicious patterns | ${summary.suspicious || 0} |
+| Code density | ${report._density || computeDensity(functions, file)} |
 
 ## Hotspots
 
@@ -524,9 +771,14 @@ ${hotspots.mostCalled.map((f, i) => `| ${i + 1} | Most-called | \`${f.name}\` �
 ` : ""}${hotspots.roots.length > 0 ? `| — | Roots (${hotspots.roots.length}) | Entry points: ${hotspots.roots.slice(0, 8).map((f) => `\`${f.name}\``).join(", ")}${hotspots.roots.length > 8 ? " …" : ""} |\n` : ""}${hotspots.leaves.length > 0 ? `| — | Leaves (${hotspots.leaves.length}) | Terminal functions: ${hotspots.leaves.slice(0, 8).map((f) => `\`${f.name}\``).join(", ")}${hotspots.leaves.length > 8 ? " …" : ""} |\n` : ""}${hotspots.mostCalled.length === 0 && hotspots.roots.length === 0 && hotspots.leaves.length === 0 ? "_No cross-function calls detected._\n" : ""}
 ## String Alerts
 
-${alerts.length === 0 ? "_No significant patterns detected._\n" : `| Severity | Pattern | Function | Line | Matches |
-|----------|---------|----------|------|---------|
-${alerts.map((a) => `| ${a.severity} | ${a.label} | \`${a.fn}\` | ${a.line} | ${a.matches.join(" · ")} |`).join("\n")}
+${alerts.length === 0 ? "_No significant patterns detected._\n" : `| Severity | Pattern | Function | Line | Trace | Matches |
+|----------|---------|----------|------|-------|---------|
+${alerts.map((a) => {
+    const tr = (report.alertTraces || []).find((t) => t.fn === a.fn);
+    const afn = functions.find((f) => f.name === a.fn);
+    const traceStr = tr ? tr.path.join(" → ") : (afn && afn.calledBy.length === 0) ? "no callers" : "no path";
+    return `| ${a.severity} | ${a.label} | \`${a.fn}\` | ${a.line} | ${traceStr} | ${a.matches.join(" · ")} |`;
+  }).join("\n")}
 `}
 ## Hot Groups
 
@@ -534,19 +786,7 @@ ${hotspots.hotGroups.filter(([, c]) => c > 0).length === 0 ? "_No significant gr
 |------|-------|-------|
 ${hotspots.hotGroups.filter(([, c]) => c > 0).map(([g, c], i) => `| ${i + 1} | \`${g}\` | ${c} |`).join("\n")}
 `}
-## Quick Lookup
-
-| Word | Functions |
-|------|-----------|
-${lookup.map(([word, fns]) => `| \`${word}\` | ${fns.slice(0, 6).map((f) => `\`${f}\``).join(" · ")}${fns.length > 6 ? ` _+${fns.length - 6} more_` : ""} |`).join("\n")}
-
-## By Extraction Type
-
-| Type | Count |
-|------|-------|
-${typeTable}
-
-## Call Graph
+${functions.filter((f) => f.calls.length > 0).length > 0 ? `## Call Graph
 
 \`\`\`mermaid
 graph TD
@@ -555,23 +795,9 @@ ${functions.filter((f) => f.calls.length > 0).map((f) =>
   ).join("\n")}
 \`\`\`
 
-## Function Inventory
+## Naming Convention` : `_No cross-function call edges to graph._
 
-| # | Name | Lines | Cmp | Params | Calls | Called By | Flags |
-|---|------|-------|-----|--------|-------|-----------|-------|
-${functions.map((f, i) => {
-    const lines = f.lines[0] ? `${f.lines[0]}-${f.lines[1]}` : "-";
-    const calls = f.calls.length > 0 ? f.calls.join(", ") : "—";
-    const calledBy = f.calledBy.length > 0 ? f.calledBy.join(", ") : "root";
-    const flags = [
-      f.flat ? "FLAT" : "",
-      ...(f.suspicious || []).map((s) => s),
-    ].filter(Boolean).join(" · ") || "—";
-    const cmp = f.complexity || 1;
-    return `| ${i + 1} | \`${f.name}\` | ${lines} | ${cmp} | ${f.params} | ${calls} | ${calledBy} | ${flags} |`;
-  }).join("\n")}
-
-## Naming Convention
+## Naming Convention`}
 
 All sub-functions follow the format: \`_sub_<parent>_<seq>_<description>\`
 
@@ -597,39 +823,216 @@ ${Object.entries(naming.hints).map(([k, v]) => `| \`${k}\` | ${v} |`).join("\n")
 ---
 Generated by deob · ${new Date().toISOString().slice(0, 10)}
 `;
+  if (brief) {
+    const idx = result.indexOf("\n## Naming Convention\n");
+    if (idx > 0) return result.substring(0, idx) + "\n---\n*Naming convention: see summary.md*\n";
+  }
+  return result;
 }
 
-function generateJSON(report) {
-  return JSON.stringify(report, null, 2);
-}
-
-function runStructure(input, outputDir, format) {
+function runStructure(input, outputDir, opts) {
   const afterPath = path.join(outputDir, "main.js");
   if (!fs.existsSync(afterPath)) {
     console.log("  Structure report skipped: no output file found");
     return null;
   }
   const report = analyzeStructure(afterPath);
-  const ext = format === "md" ? ".md" : ".json";
-  const outPath = path.join(outputDir, "structure" + ext);
-  const content = format === "md" ? generateMarkdown(report) : generateJSON(report);
+  report._filepath = afterPath;
+  const outPath = path.join(outputDir, "structure.md");
+  const content = generateMarkdown(report, opts);
   fs.writeFileSync(outPath, content, "utf-8");
   console.log(`  Structure report: ${outPath}`);
   return report;
 }
 
+// ── Compact Index ──────────────────────────────────────────────────
+
+function generateIndex(outputDir) {
+  const mainPath = path.join(outputDir, "main.js");
+  if (!fs.existsSync(mainPath)) {
+    console.log("  Index skipped: no output file found");
+    return;
+  }
+  const report = analyzeStructure(mainPath);
+  const { summary, functions, alerts, hotspots, lookup, tracePath } = report;
+
+  // ── Analyze function source for size / data / hex annotations
+  const code = fs.readFileSync(mainPath, "utf-8");
+  const alertLabels = new Map(); // fnName → Set(label)
+  for (const a of alerts) {
+    if (!alertLabels.has(a.fn)) alertLabels.set(a.fn, new Set());
+    alertLabels.get(a.fn).add(a.label);
+  }
+  const fnMeta = new Map(); // name → { totalLines, stmts, heavyHex, alertLabels, srcText }
+  for (const fn of functions) {
+    const start = fn.lines[0]; const end = fn.lines[1];
+    if (!start || !end) { fnMeta.set(fn.name, { totalLines: 0, stmts: fn.bodyLen, heavyHex: false, alertLabels: alertLabels.get(fn.name), srcText: "" }); continue; }
+    const fnLines = code.split("\n").slice(start - 1, end);
+    const totalLines = fnLines.length;
+    const hexLines = fnLines.filter((l) => l.length > 400 && /0x[0-9a-fA-F]{3,}/.test(l));
+    const heavyHex = hexLines.length > 0 && hexLines.length / totalLines > 0.2;
+    fnMeta.set(fn.name, { totalLines, stmts: fn.bodyLen, heavyHex, alertLabels: alertLabels.get(fn.name), srcText: fnLines.join("\n") });
+  }
+
+  const lines = [];
+  lines.push(`# deob index · ${report.file} · ${summary.totalFunctions} functions`);
+  lines.push("");
+
+  // Entry points
+  const roots = (hotspots.roots || []).filter((f) => f.calls.length > 0);
+  if (roots.length > 0) {
+    lines.push("## entry");
+    for (const f of roots) {
+      const flags = [f.flat ? "FLAT" : "", ...(f.suspicious || [])].filter(Boolean).join(" ");
+      lines.push(`${f.name} | L${f.lines[0]}-${f.lines[1]} | cc=${f.complexity || 1} | → ${f.calls.join(", ") || "—"}${flags ? " | " + flags : ""}`);
+    }
+    lines.push("");
+  }
+
+  // String alerts
+  if (alerts.length > 0) {
+    lines.push("## alerts");
+    for (const a of alerts) {
+      lines.push(`[${a.label}] ${a.fn} · L${a.line} · ${(a.matches || []).join(" ")}`);
+    }
+    lines.push("");
+  }
+
+  // Hot functions
+  const mc = (hotspots.mostCalled || []).filter((f) => f.calledBy.length > 0);
+  if (mc.length > 0) {
+    lines.push("## hot");
+    for (const f of mc) {
+      lines.push(`${f.name} ⇐ ${f.calledBy.length} callers`);
+    }
+    lines.push("");
+  }
+
+  // Word lookup
+  if (lookup.length > 0) {
+    lines.push("## lookup");
+    for (const [word, fns] of lookup.slice(0, 30)) {
+      lines.push(`${word} → ${fns.slice(0, 6).join(", ")}${fns.length > 6 ? " +" + (fns.length - 6) : ""}`);
+    }
+    lines.push("");
+  }
+
+  // Trace paths
+  if (tracePath && tracePath.length > 1) {
+    lines.push("## trace");
+    lines.push(tracePath.join(" → "));
+    lines.push("");
+  }
+
+  // Suspicious functions
+  const suspiciousFns = functions.filter((f) => (f.suspicious || []).length > 0);
+  if (suspiciousFns.length > 0) {
+    lines.push("## suspicious");
+    for (const f of suspiciousFns) {
+      const flines = f.lines[0] ? `L${f.lines[0]}` : "?";
+      lines.push(`${f.name} | ${flines} | ${(f.suspicious || []).join(", ")}`);
+    }
+    lines.push("");
+  }
+
+  // Flattened functions
+  const flatFns = functions.filter((f) => f.flat);
+  if (flatFns.length > 0) {
+    lines.push("## flat");
+    for (const f of flatFns) {
+      const flines = f.lines[0] ? `L${f.lines[0]}` : "?";
+      lines.push(`${f.name} | ${flines} | cc=${f.complexity || 1} | while+switch`);
+    }
+    lines.push("");
+  }
+
+  // ── Group functions by category
+  const groups = {};
+  for (const f of functions) {
+    const name = f.name;
+    const meta = fnMeta.get(name);
+    const cat = categorizeFn(name, f, meta);
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(f);
+  }
+  const groupLabels = { core: "Core runtime", branch: "Branches", callback: "Callbacks", data: "Data tables", network: "Network", websocket: "WebSocket", crypto: "Crypto", parser: "Parser", i18n: "i18n", polyfill: "Polyfill", filesystem: "Filesystem", other: "Other" };
+
+  for (const [cat, fns] of Object.entries(groups)) {
+    if (fns.length === 0) continue;
+    lines.push(`## fn/${cat}  (${fns.length})`);
+    for (const f of fns) {
+      const flines = f.lines[0] ? `L${f.lines[0]}-${f.lines[1]}` : "?";
+      const meta = fnMeta.get(f.name) || { totalLines: 0, stmts: f.bodyLen, heavyHex: false };
+      const size = `${meta.totalLines}L/${meta.stmts}S/${f.params}P`;
+      const calls = f.calls.length > 0 ? " → " + f.calls.join(", ") : "";
+      const calledBy = f.calledBy.length > 0 ? " ⇐ " + f.calledBy.slice(0, 5).join(", ") + (f.calledBy.length > 5 ? " +" + (f.calledBy.length - 5) : "") : f.calls.length > 0 ? " root" : "";
+      const semTags = (f.semanticTags || []).join(" ");
+      const desc = f.description || "";
+      const flags = [
+        meta.heavyHex ? "DATA" : "",
+        f.flat ? "FLAT" : "",
+        ...(f.suspicious || []),
+      ].filter(Boolean).join(" ");
+      const extras = [semTags, desc, flags].filter(Boolean).join(" ; ");
+      lines.push(`${f.name} | ${flines} | ${size} | cc=${f.complexity || 1}${calls}${calledBy}${extras ? " | " + extras : ""}`);
+    }
+    lines.push("");
+  }
+
+  const outPath = path.join(outputDir, "index.txt");
+  fs.writeFileSync(outPath, lines.join("\n"), "utf-8");
+  console.log(`  Index: ${outPath}`);
+}
+
+function categorizeFn(name, fn, meta) {
+  if (meta && meta.heavyHex) return "data";
+  if (!name.startsWith("_sub_")) return "core";
+  if (name.includes("_sub_return_fn")) return "callback";
+  if (/_(if|else|try|catch|case)$/.test(name)) return "branch";
+
+  const labels = meta && meta.alertLabels ? meta.alertLabels : null;
+  const src = meta && meta.srcText ? meta.srcText : "";
+
+  if (labels && labels.has("Network")) return "network";
+  if (labels && labels.has("Crypto")) return "crypto";
+  if (labels && labels.has("Eval / Dynamic")) return "dynamic";
+
+  // Scan source text for domain keywords
+  if (/\b(axios|fetch|xhr\b|XMLHttpRequest|User-Agent|responseType|rateLimit|FormData|x-www-form)\b/i.test(src)) return "network";
+  if (/\b(websocket|ws\.|readyState|WebSocket|handshake|close code|terminate|ping\b|pong\b|subprotocol|permessage-deflate|_socket\b)\b/i.test(src)) return "websocket";
+  if (/\b(crypto|sha512|sha256|hmac|md5|encrypt|decrypt|sign\b|cipher\b|hash\b|randomBytes|pbkdf2)\b/i.test(src)) return "crypto";
+  if (/\b(yaml|parser|scalar|blockMap|blockSeq|flowSeq|resolved\b|YAML\b)\b/i.test(src)) return "parser";
+  if (/\b(i18n|i18next|translat|lng\b|interpolat|plural|namespace|resStore|ns\b)\b/i.test(src)) return "i18n";
+  if (/\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__)\b/i.test(src)) return "polyfill";
+  if (/\b(fs\.|fse\.|chmod|chown|statSync|mkdir|readFile|writeFile|copyFile|unlink|Buffer\.|glob\b|readdir|rmSync)\b/i.test(src)) return "filesystem";
+  return "other";
+}
+
 // ── Cross-File Summary ──────────────────────────────────────────────
 
-function generateCrossSummary(results, dirName, format) {
+function classifyFileType(report) {
+  if (report.summary.totalFunctions === 0) {
+    if (report.summary.originalFunctions === 0) return "proxy";
+    return "single-export";
+  }
+  if (report.summary.subFunctions === 0 && report.summary.originalFunctions === 1) return "single-fn";
+  return "module";
+}
+
+function generateCrossSummary(results) {
+  const hasSrcPaths = results.some((r) => r.srcPath);
   const files = results.map((r) => ({
     name: r.file,
+    src: r.srcPath || r.file + ".js",
+    type: classifyFileType(r.report),
     total: r.report.summary.totalFunctions,
     sub: r.report.summary.subFunctions,
     orig: r.report.summary.originalFunctions,
     alerts: (r.report.alerts || []).length,
   }));
 
-  // Merge hotspots: find most-called across all files
+  const dirName = path.basename(results[0]?.report?.file || "output");
+
   const allMostCalled = [];
   const allRoots = [];
   const allAlerts = [];
@@ -647,7 +1050,6 @@ function generateCrossSummary(results, dirName, format) {
   }
   allMostCalled.sort((a, b) => b.callers - a.callers);
 
-  // Merge lookup index
   const globalLookup = new Map();
   for (const r of results) {
     for (const [word, fns] of (r.report.lookup || [])) {
@@ -658,39 +1060,61 @@ function generateCrossSummary(results, dirName, format) {
       }
     }
   }
+  // Filter out common stopwords that pollute the lookup
+  const LOOKUP_STOP = new Set([
+    "is", "call", "try", "set", "create", "object", "array", "string",
+    "number", "function", "type", "value", "key", "index", "length",
+    "data", "result", "error", "event", "target", "source", "name",
+    "get", "has", "new", "init", "this", "that", "self",
+    "read", "write", "int", "compare", "base", "buffer", "method",
+    "branch", "listener", "use", "cache", "support", "return",
+  ]);
   const topLookup = [...globalLookup.entries()]
-    .filter(([, fns]) => fns.length >= 2 && fns.length <= 80)
+    .filter(([word, fns]) => fns.length >= 2 && !LOOKUP_STOP.has(word) &&
+      !/^ln\d+$/.test(word) && !/^[0-9a-fA-F]{4,}$/.test(word) && fns.length <= 80)
     .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 20);
+    .slice(0, 15);
 
-  if (format === "json") {
-    return JSON.stringify({ dir: dirName, files, topLookup, mostCalled: allMostCalled.slice(0, 15), roots: allRoots, alerts: allAlerts }, null, 2);
+  // Add alert-relevant keywords that might have been filtered out
+  const alertWords = new Set();
+  for (const a of allAlerts) {
+    for (const m of (a.matches || [])) {
+      const w = m.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      if (w.length > 3) alertWords.add(w);
+    }
   }
+  const alertLookup = [...globalLookup.entries()]
+    .filter(([w]) => alertWords.has(w))
+    .slice(0, 5);
 
-  // Markdown
   return `# Cross-File Summary · ${dirName}
 
 ## Files (${files.length})
 
-| # | File | Functions | Sub-fns | Originals | Alerts |
-|---|------|-----------|---------|-----------|--------|
-${files.map((f, i) => `| ${i + 1} | \`${f.name}.js\` | ${f.total} | ${f.sub} | ${f.orig} | ${f.alerts} |`).join("\n")}
+${hasSrcPaths ? `| # | File | Source | Type | Fns | Sub | Orig | Alerts |
+|---|------|--------|------|-----|-----|------|--------|
+${files.map((f, i) => `| ${i + 1} | \`${f.name}\` | \`${f.src}\` | ${f.type} | ${f.total} | ${f.sub} | ${f.orig} | ${f.alerts} |`).join("\n")}` : `| # | File | Type | Fns | Sub | Orig | Alerts |
+|---|------|------|-----|-----|------|--------|
+${files.map((f, i) => `| ${i + 1} | \`${f.name}.js\` | ${f.type} | ${f.total} | ${f.sub} | ${f.orig} | ${f.alerts} |`).join("\n")}`}
 
-## Cross-File Hotspots
+## Top Called Functions
 
-${allMostCalled.length > 0 ? `| Rank | File | Function | Called By |
-|------|------|----------|-----------|
+${allMostCalled.length > 0 ? `| Rank | File | Function | Callers |
+|------|------|----------|---------|
 ${allMostCalled.slice(0, 15).map((m, i) => `| ${i + 1} | \`${m.file}.js\` | \`${m.name}\` | ${m.callers} |`).join("\n")}
-` : "_No cross-file call data available._\n"}
+` : "_No call data available._\n"}
 ${allRoots.length > 0 ? `### Root Functions (${allRoots.length})
 ${allRoots.slice(0, 15).map((r) => `- \`${r.file}.js\` → \`${r.name}\``).join("\n")}
 ${allRoots.length > 15 ? `- _+${allRoots.length - 15} more_\n` : ""}
 ` : ""}
-## Cross-File Lookup
+## Keyword Index
 
-| Word | Files & Functions |
+${topLookup.length > 0 ? `| Word | Files & Functions |
 |------|-------------------|
 ${topLookup.map(([word, fns]) => `| \`${word}\` | ${fns.slice(0, 5).map((f) => `\`${f}\``).join(" · ")}${fns.length > 5 ? ` _+${fns.length - 5} more_` : ""} |`).join("\n")}
+${alertLookup.length > 0 ? `| **alert:** | |
+${alertLookup.map(([word, fns]) => `| \`${word}\` | ${fns.slice(0, 5).map((f) => `\`${f}\``).join(" · ")}${fns.length > 5 ? ` _+${fns.length - 5} more_` : ""} |`).join("\n")}
+` : ""}` : "_No significant keywords found._\n"}
 
 ## Cross-File Alerts
 
@@ -699,9 +1123,225 @@ ${allAlerts.length === 0 ? "_No alerts across files._\n" : `| Sev | File | Patte
 ${allAlerts.slice(0, 40).map((a) => `| ${a.severity} | \`${a.file}.js\` | ${a.label} | ${a.line} | ${(a.matches || []).join(" · ")} |`).join("\n")}
 ${allAlerts.length > 40 ? `| … | … | _+${allAlerts.length - 40} more_ | … | … |\n` : ""}
 `}
+## Naming Convention
+
+All sub-functions follow the format: \`_sub_<parent>_<seq>_<description>\`
+
+| Component | Meaning |
+|-----------|---------|
+| \`_sub_\` | Prefix indicating an extracted sub-function |
+| \`<parent>\` | Parent function name, method name, or \`lnXXXX\` for anonymous functions |
+| \`<seq>\` | Two-digit extraction order within the parent |
+| \`<description>\` | Short hint about the extracted code structure |
+
+### Hint Descriptions
+
+| Hint | Meaning |
+|------|---------|
+| \`try\` | try block body |
+| \`catch\` | catch handler |
+| \`if\` | if branch |
+| \`else\` | else branch |
+| \`case\` | switch case body |
+| \`iife_body\` | IIFE body |
+| \`init_vars\` | variable initialization |
+| \`declare_fn\` | function declarations |
+| \`return_val\` | return value expression |
+| \`body\` | loop body or block |
+| \`block\` | general code block |
+
 ---
 Generated by deob · ${new Date().toISOString().slice(0, 10)}
 `;
 }
 
-module.exports = { analyzeStructure, generateMarkdown, generateJSON, generateCrossSummary, runStructure };
+module.exports = { analyzeStructure, generateMarkdown, generateIndex, generateCrossSummary, runStructure, applyTierFilter };
+
+// ── Tier Filtering ──────────────────────────────────────────────────
+
+function applyTierFilter(outputDir, tier, fold) {
+  const mainPath = path.join(outputDir, "main.js");
+  if (!fs.existsSync(mainPath)) return;
+
+  // Step 1: run full analysis on current main.js
+  const report = analyzeStructure(mainPath);
+
+  // Step 2: determine keep set (signal functions — always kept in full)
+  const keep = new Set();
+
+  if (tier >= 1) {
+    for (const fn of report.functions) {
+      const hasAlert = (report.alerts || []).some((a) => a.fn === fn.name);
+      const isMostCalled = (report.hotspots?.mostCalled || []).some((mc) => mc.name === fn.name);
+      const isRoot = (report.hotspots?.roots || []).some((r) => r.name === fn.name);
+      const isHot = hasAlert || isMostCalled || isRoot ||
+        fn.flat || fn.complexity > 10 || (fn.suspicious || []).length > 0;
+      if (isHot) keep.add(fn.name);
+    }
+  }
+
+  // Tier 2: expand transitively to callees
+  if (tier === 2) {
+    const expanded = new Set(keep);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const fn of report.functions) {
+        if (expanded.has(fn.name)) {
+          for (const callee of (fn.calls || [])) {
+            if (!expanded.has(callee)) {
+              expanded.add(callee);
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+    for (const name of expanded) keep.add(name);
+  }
+
+  if (tier >= 3 || keep.size === 0 || keep.size >= report.functions.length) return;
+
+  // Step 3: parse the generated code
+  const code = fs.readFileSync(mainPath, "utf-8");
+  let ast;
+  try {
+    ast = parser.parse(code, {
+      sourceType: "script", allowReturnOutsideFunction: true,
+      allowUndeclaredExports: true, errorRecovery: true,
+    });
+  } catch (e) {
+    return;
+  }
+
+  const fnIdx = new Map();
+  for (const f of report.functions) fnIdx.set(f.name, f);
+
+  // Build byte-range edits for non-kept functions
+  const edits = [];
+  let mechCount = 0;
+
+  for (const stmt of ast.program.body) {
+    if (!t.isFunctionDeclaration(stmt) || !stmt.id || keep.has(stmt.id.name)) continue;
+
+    const name = stmt.id.name;
+    const fn = fnIdx.get(name);
+    const lines = fn && fn.lines[0] ? `L${fn.lines[0]}-${fn.lines[1]}` : "L?";
+    const cmp = fn && fn.complexity > 1 ? `, cc=${fn.complexity}` : "";
+
+    if (fold) {
+      const mech = detectMechanical(stmt);
+      if (mech) {
+        mechCount++;
+        edits.push({
+          start: stmt.start, end: stmt.end,
+          replacement: `// [${mech.type}] ${name} · ${lines}${cmp}${mech.detail ? " · " + mech.detail : ""}`,
+        });
+        continue;
+      }
+    }
+
+    // Default: keep signature, drop body
+    edits.push({
+      start: stmt.body.start, end: stmt.body.end,
+      replacement: `{ /* ${lines}${cmp} */ }`,
+    });
+  }
+
+  edits.sort((a, b) => b.start - a.start);
+
+  let filtered = code;
+  for (const { start, end, replacement } of edits) {
+    filtered = filtered.slice(0, start) + replacement + filtered.slice(end);
+  }
+
+  fs.writeFileSync(mainPath, filtered, "utf-8");
+  const skipped = edits.length;
+  const kept = report.functions.length - skipped;
+  const extra = fold && mechCount > 0 ? ` (${mechCount} folded)` : "";
+  console.log(`  Tier ${tier}: kept ${kept}/${report.functions.length} functions, ${skipped} signatures${extra}`);
+}
+
+// ── Mechanical Function Detection ──────────────────────────────────────
+
+function detectMechanical(fnNode) {
+  const body = fnNode.body;
+  if (!t.isBlockStatement(body)) return null;
+  const stmts = body.body;
+  const paramNames = new Set(fnNode.params.filter((p) => t.isIdentifier(p)).map((p) => p.name));
+
+  // Pattern 1: pure forward — single return CallExpression, params passed through
+  if (stmts.length === 1 && t.isReturnStatement(stmts[0]) && stmts[0].argument) {
+    const ret = stmts[0].argument;
+    if (t.isCallExpression(ret) && t.isIdentifier(ret.callee)) {
+      const argsAreParams = ret.arguments.every((a) => t.isIdentifier(a) && paramNames.has(a.name));
+      if (argsAreParams && ret.arguments.length === paramNames.size) {
+        return { type: "forward", detail: "→ " + ret.callee.name };
+      }
+    }
+  }
+
+  // Pattern 2: pure computation — no CallExpression anywhere in body
+  let hasCall = false;
+  function scanCalls(n) {
+    if (!n || typeof n !== "object" || hasCall) return;
+    if (t.isCallExpression(n)) { hasCall = true; return; }
+    if (t.isFunction(n)) return;
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) scanCalls(x); }
+      else if (v && typeof v.type === "string") scanCalls(v);
+    }
+  }
+  scanCalls(body);
+  if (!hasCall && stmts.length <= 5) {
+    return { type: "pure computation", detail: `${stmts.length} stmts, cc=1` };
+  }
+
+  // Pattern 3: no external references (only params + locally declared)
+  const declared = new Set(paramNames);
+  function collectDecls(n) {
+    if (!n || typeof n !== "object") return;
+    if (t.isVariableDeclaration(n)) {
+      for (const d of n.declarations) {
+        if (t.isIdentifier(d.id)) declared.add(d.id.name);
+      }
+    }
+    if (t.isFunction(n)) return;
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) collectDecls(x); }
+      else if (v && typeof v.type === "string") collectDecls(v);
+    }
+  }
+  collectDecls(body);
+
+  let hasExternal = false;
+  function scanRefs(n) {
+    if (!n || typeof n !== "object" || hasExternal) return;
+    if (t.isIdentifier(n) && !declared.has(n.name)) {
+      // Allow built-in globals
+      if (!/^(Object|Array|String|Number|Boolean|Function|Math|Date|RegExp|Error|TypeError|undefined|NaN|Infinity|console|JSON|parseInt|parseFloat|isNaN|isFinite|null|true|false|arguments|this|window|document|global|globalThis)$/.test(n.name)) {
+        hasExternal = true;
+      }
+    }
+    if (t.isFunction(n)) return;
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) scanRefs(x); }
+      else if (v && typeof v.type === "string") scanRefs(v);
+    }
+  }
+  scanRefs(body);
+  if (!hasExternal) {
+    return { type: "closed", detail: `self-contained, cc=1` };
+  }
+
+  return null;
+}

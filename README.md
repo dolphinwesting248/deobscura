@@ -1,12 +1,9 @@
 # deob
 
-A general-purpose AST-level JavaScript deobfuscation preprocessing framework. 
-
-All transformations are **semantics-preserving** — they restructure code without changing runtime behavior. Designed as a **data-preparation step for LLM-assisted reverse engineering**.
+Deob is a general-purpose JavaScript deobfuscation preprocessing framework based on AST, designed as a **data-preparation step for LLM-assisted reverse engineering**.
 
 - **Universal.** No obfuscator detection, no signature matching. obfuscator.io, JSVMP, webpack bundles, custom obfuscators — all treated the same.
-- **Semantics-preserving.** Splitting, expansion, simplification, inlining — every pass keeps the original logic intact. Only the structure changes.
-- **LLM-oriented.** Structure reports, call graphs, string alerts, word lookup indexes, SQLite code indices — output designed for LLM consumption, not just human readability.
+- **LLM-oriented.** Structure reports, call graphs, string alerts, compact index, function categorization — output designed for LLM consumption, not just human readability.
 
 ## Quick Start
 
@@ -14,109 +11,78 @@ All transformations are **semantics-preserving** — they restructure code witho
 npm install
 npm link
 
-# Single file
-deob main.js                         # → main.deob/main.js
-deob main.js --split                 # → main.deob/ (per-function files)
-deob main.js --metrics               # → main.deob/ + metrics.html
-deob main.js --md --json             # → main.deob/ + structure reports
-deob main.js --index                 # → main.deob/ + code index
-
-# Directory (cross-file summary)
-deob src/ --md --json                # → src.deob/ + summary.md
-
-# Config-driven (auto-detect deob.config.js)
-deob init                            # generate config template
-deob                                 # run with ./deob.config.js
-deob --config path/to/config.js      # explicit config path
+deob init                    # create deob.config.js
+# edit deob.config.js — set input path and options
+deob                         # run with config
+deob --config other.js       # or: deob -c other.js
 ```
 
 All output goes into a directory:
 
 ```
-main.deob/
+output.deob/
 ├── main.js           ← deobfuscated code
-├── metrics.html      ← readability report (--metrics)
-├── structure.md      ← function inventory + hotspots + alerts (--md)
-├── structure.json    ← machine-readable (--json)
-└── .index/           ← code intelligence index (--index)
+├── metrics.html      ← readability report (metrics: true)
+├── structure.md      ← function analysis + hotspots + alerts (md: true)
+└── index.txt         ← compact function catalog for LLM navigation (index: true)
 ```
 
-## CLI Reference
+**Directory input** recursively processes nested subdirectories. Source paths are preserved in the cross-file `summary.md`.
 
-```
-deob                            auto-detect deob.config.js in cwd
-deob <input> [output-dir] [options]
-deob --config <path>
-deob init [--force]
-```
-
-| Flag | Output | Description |
-|------|--------|-------------|
-| (default) | `main.js` | Single deobfuscated file |
-| `--split` | per-function files | Each `_sub_` function in its own file, grouped by parent |
-| `--metrics` | `metrics.html` | Before/after readability comparison with Chart.js |
-| `--md` | `structure.md` | Function inventory, call graph, hotspots, alerts, lookup index |
-| `--json` | `structure.json` | Same as `--md` in machine-readable JSON |
-| `--index` | `.index/` | SQLite knowledge graph for AI-assisted exploration |
-| `--config <path>` | — | Load options from config file, ignore other flags |
-| `init` | `deob.config.js` | Generate config template in current directory |
-
-**Directory input:** processes each `.js` file independently, then generates a `summary.md` / `summary.json` with cross-file hotspots, merged alerts, and combined lookup index.
-
-**Config format** (`deob init` generates a template):
+Run `deob init` to generate a template:
 
 ```javascript
 module.exports = {
   input: "src/main.js",             // file, directory, or array
-  // input: ["a.js", "b.js", "sub/"],
-  // output: "out/",                // optional
-  split: false,
-  metrics: false,
-  md: true,
-  json: false,
-  index: false,
+  // output: "out/",                // optional — auto-derived from input
+  split: false,                     // per-function files
+  metrics: false,                   // HTML readability report
+  md: true,                         // Markdown structure report
+  index: false,                     // compact index.txt for LLM navigation
+  tier: 3,                          // output filtering: 1|2|3
+  fold: false,                      // collapse mechanical functions
 };
 ```
 
-## Structure Report Sections
+See [Tiered Output](docs/tier-and-fold.md) for detailed guidance on `tier` and `fold`.
+
+## Structure Report (`structure.md`)
 
 | Section | Content |
 |---------|---------|
-| Summary | Total functions, sub/original breakdown, max nesting depth, extraction types |
-| Hotspots | Most-called functions, root entry points, leaf terminals, hot groups |
-| Hot Groups | Directories with most cross-function call edges |
-| Quick Lookup | Word → function index (splits `_sub_program_init_vars` → `program` · `init` · `vars`) |
-| String Alerts | Security-relevant patterns: API endpoints, tokens, crypto, eval, storage, DOM sinks |
-| Call Graph | Mermaid diagram of cross-function calls |
-| Function Inventory | Full table with name, lines, params, calls, called-by |
+| TL;DR | One-line summary: *"847 functions · 12 high alerts · 5 flattened · 2 entry points"* |
+| Summary | Domain classification, code density, total/sub-fns/original/complexity/flattened/suspicious counts |
+| Hotspots + Trace | Most-called functions, root entry points, leaf terminals, suggested trace path |
+| String Alerts | Security-relevant patterns with severity, function, line number, and entry→alert trace |
+| Hot Groups | Groups with most cross-function call edges |
+| Call Graph | Mermaid diagram of cross-function calls (suppressed when no edges exist) |
+| Naming Convention | Reference for `_sub_<parent>_<seq>_<description>` format and hint suffixes |
 
-## Code Index 
+## Compact Index (`index.txt`)
 
-Builds a SQLite knowledge graph using `node:sqlite` + `@babel/traverse`.
+A token-optimized function catalog in custom text format, designed for LLM consumption. Contains:
 
-**Schema:** `nodes` (functions, classes, variables), `edges` (calls, contains, references), FTS5 search.
+| Section | Content |
+|---------|---------|
+| `## entry` | Entry point functions with calls and flags |
+| `## alerts` | Alert-annotated functions with matched patterns |
+| `## hot` | Most-called functions ranked by incoming edges |
+| `## lookup` | Word → function mapping (semantic keywords only) |
+| `## trace` | Longest call path through the graph |
+| `## suspicious` | Functions with suspicious patterns (eval, computed key, __proto__) |
+| `## flat` | Functions with control-flow flattening |
+| `## fn/*` | All functions grouped by category (core / branch / callback / data / network / crypto / parser / i18n / websocket / polyfill / filesystem / other) |
 
-**Optimizations for deob output:**
-- Skips `index.js` glue files
-- Tags every node with `metadata.group` (parent directory)
-- Filters noise `MemberExpression` references from obfuscated identifiers
-
-**Example query:**
-```sql
-SELECT name, file_path FROM nodes
-WHERE json_extract(metadata, '$.group') = 'misc' AND kind = 'function';
-
-SELECT target, COUNT(*) as c FROM edges
-WHERE kind = 'calls' GROUP BY target ORDER BY c DESC LIMIT 10;
-```
+Each `fn/*` entry includes: size triplets (`lines/stmts/params`), semantic tags, function descriptions, and flags (`DATA`, `FLAT`).
 
 ## Pipeline 
 
 | Step | Pass | Description |
 |------|------|-------------|
+| 0 | `sanitize` | Rename reserved-word identifiers (let, default, delete…) to safe alternatives |
 | 1 | `traverse` | Collect all function nodes, process innermost-first |
 | 2 | `wrapper` | Extract top-level IIFEs from comma chains |
-| 3 | `hoist` | Move var/let/const/function to top of every scope |
+| 3 | `hoist` | Import→top, export→bottom; var/let/const/fn to top of every scope |
 | 4 | `extract-inline` | Lift embedded function expressions (return, assignment, IIFE, MemberExpression) |
 | 5 | `simplify` | Fold constants, simplify booleans, fold string ops, normalize AST |
 | 6 | `short-circuit` | Convert `A\|\|B\|\|(C,D)` → `if(!A&&!B){C;D;}`, ternary → if/else, `var x=cond?a:b` → if/else |
@@ -131,10 +97,24 @@ WHERE kind = 'calls' GROUP BY target ORDER BY c DESC LIMIT 10;
 | 15 | `single-caller` | Inline functions called from exactly one place |
 | 16 | `normalize` | Multi-decl split, chained assignment split, for(;;)→while(true) |
 | 17 | `extract-inline` | Second pass — catch patterns exposed by restructuring |
+| 18 | `annotate` | Inject `[API Endpoint]`, `[Token/Key]`, `[Crypto]` etc. comments before functions |
+| 19 | `sanitize` | Final pass — catch any reserved-word identifiers introduced by pipeline |
+
+## Tiered Output
+
+The `tier` and `fold` options control how much code reaches the LLM. See **[docs/tier-and-fold.md](docs/tier-and-fold.md)** for detailed guidance, behavior matrix, and best practices.
+
+Quick reference:
+
+| Config | What the LLM sees |
+|--------|-------------------|
+| `tier: 3` | All functions, full code |
+| `tier: 1` | Signal functions (alerts, hotspots, flattening, suspicious) full code. Rest: signatures only. |
+| `tier: 1, fold: true` | Same + mechanical functions (polyfill/pure-compute/forward) collapsed to comments. |
+| `tier: 2` | Signal functions + callees full code. Rest: signatures. |
+| `tier: 2, fold: true` | Same + mechanical functions collapsed. |
 
 ## Output Examples
-
-All examples verified against actual pipeline output.
 
 ### Comma operator expansion + inline function extraction
 
@@ -236,24 +216,18 @@ main({ input: "obfuscated.js", output: "out/", split: true });
 ```
 deob.js               ← CLI entry point
 scripts/
-├── pipeline.js       ← Main orchestration (17 passes)
-├── extract.js        ← Syntactic splitting (IIFE, try-catch, if-else, switch, …)
-├── passes.js         ← All post-processing passes
+├── pipeline.js       ← Main orchestration (20 passes)
+├── extract.js        ← Syntactic splitting (IIFE, try-catch, if-else, switch…)
+├── passes.js         ← All post-processing passes (hoist, simplify, short-circuit, dead-code, sanitize…)
 ├── traverse.js       ← Innermost-first function collection
 ├── metrics.js        ← Readability analysis + HTML Chart.js report
-├── structure.js      ← Function inventory, hotspots, alerts, lookup index
-├── ast-utils.js      ← AST walker, detectors, clone
+├── structure.js      ← Structure reports, compact index, tier filter, domain classification
+├── ast-utils.js      ← AST walker, detectors, clone, await/yield detection
 ├── scope.js          ← Variable scope & external reference analysis
-├── emit.js           ← Sub-function declaration builder
-├── naming.js         ← Naming convention helpers
+├── emit.js           ← Sub-function declaration builder with reserved-word sanitization
 ├── wrapper.js        ← Top-level IIFE extraction
-├── config.js         ← Parser, generator, globals
+├── config.js         ← Parser, generator, alert patterns, globals
 ├── index.js          ← Public API exports
-└── indexer/          ← Code intelligence indexer
-    ├── index.js      ← Orchestration: scan → extract → store → resolve
-    ├── extract.js    ← Babel-based JS symbol & call-graph extractor
-    ├── schema.js     ← SQLite schema
-    └── store.js      ← node:sqlite database operations
 ```
 
 ## License

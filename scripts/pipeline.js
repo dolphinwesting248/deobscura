@@ -12,7 +12,7 @@ const { parser, generate, t, fs } = require("./config");
 const path = require("path");
 const { processAllFunctions } = require("./traverse");
 const { extractTopLevelIIFEs } = require("./wrapper");
-const { hoistDeclarations, simplify, normalizeShortCircuit, expandSequences, eliminateDeadCode, inlineReadOnlyProperties, removeUnusedHelpers, simplifyRedundantConditions, inlinePureWrappers, sortByCallTree, inlineSingleCallerFns, normalizeSyntax, extractInlineFunctions, annotateAlerts } = require("./passes");
+const { sanitizeReservedWords, hoistDeclarations, simplify, normalizeShortCircuit, expandSequences, eliminateDeadCode, inlineReadOnlyProperties, removeUnusedHelpers, simplifyRedundantConditions, inlinePureWrappers, sortByCallTree, inlineSingleCallerFns, normalizeSyntax, extractInlineFunctions, annotateAlerts } = require("./passes");
 
 function main({ input, output, split } = {}) {
   if (!input) throw new Error("main() requires { input: '<path>' }");
@@ -29,6 +29,10 @@ function main({ input, output, split } = {}) {
     allowUndeclaredExports: true,
     errorRecovery: true,
   });
+
+  // ==================== Sanitization ====================
+  console.log("Step 0: Sanitizing reserved-word identifiers...");
+  sanitizeReservedWords(ast);
 
   // ==================== Extraction Passes ====================
   console.log("Step 1: Processing all function bodies...");
@@ -137,6 +141,10 @@ function main({ input, output, split } = {}) {
   const t18 = Date.now();
   annotateAlerts(ast);
   console.log(`  Done in ${Date.now() - t18}ms`);
+
+  // ==================== Final Sanitization ====================
+  console.log("Step 19: Sanitizing reserved-word identifiers...");
+  sanitizeReservedWords(ast);
 
   // ==================== Output ====================
   if (split) {

@@ -1,32 +1,39 @@
 // Post-traverse passes: hoisting, constant folding, boolean simplification
 
 const { t, ALERT_PATTERNS } = require("./config");
-const { clone, walkStmtLists, walkAST, walkASTDeep } = require("./ast-utils");
+const { clone, walkStmtLists, walkAST, walkASTDeep, containsYield, containsForAwait } = require("./ast-utils");
 const { collectDefined, getExternalRefs } = require("./scope");
+const { safeParam } = require("./emit");
 
 // ---- hoistDeclarations: move var/let/const/function to top of every scope ----
 // var: always safe (engine already hoists)
 // let/const: safe in obfuscated code (initializers reference other declarations or params)
 // function: already done, now unified
 function hoistDeclarations(ast) {
-  let varCount = 0, letCount = 0, fnCount = 0, affected = 0;
+  let varCount = 0, letCount = 0, fnCount = 0, impCount = 0, expCount = 0, affected = 0;
 
   function processBlock(blockNode) {
-    if (!t.isBlockStatement(blockNode) || !Array.isArray(blockNode.body)) return;
+    if ((!t.isBlockStatement(blockNode) && blockNode.type !== "Program") || !Array.isArray(blockNode.body)) return;
     const stmts = blockNode.body;
+    const imports = [];
     const decls = [];
-    const others = [];
+    const mid = [];
+    const exports = [];
     for (const s of stmts) {
-      if (t.isFunctionDeclaration(s)) { decls.push(s); fnCount++; }
+      if (t.isImportDeclaration(s)) { imports.push(s); impCount++; }
+      else if (t.isFunctionDeclaration(s)) { decls.push(s); fnCount++; }
       else if (t.isVariableDeclaration(s)) {
         if (s.kind === "var") varCount += s.declarations.length;
         else letCount += s.declarations.length;
         decls.push(s);
       }
-      else others.push(s);
+      else if (t.isExportNamedDeclaration(s) || t.isExportDefaultDeclaration(s) || t.isExportAllDeclaration(s)) {
+        exports.push(s); expCount++;
+      }
+      else mid.push(s);
     }
-    if (decls.length > 0) {
-      blockNode.body = [...decls, ...others];
+    if (imports.length > 0 || decls.length > 0 || exports.length > 0) {
+      blockNode.body = [...imports, ...decls, ...mid, ...exports];
       affected++;
     }
   }
@@ -34,7 +41,7 @@ function hoistDeclarations(ast) {
   // Walk ALL block scopes (function bodies, if-else branches, loop bodies, etc.)
   function walk(node) {
     if (!node || typeof node !== "object") return;
-    if (t.isBlockStatement(node)) processBlock(node);
+    if (t.isBlockStatement(node) || node.type === "Program") processBlock(node);
     for (const key of Object.keys(node)) {
       if (key === "start" || key === "end" || key === "loc" ||
           key === "leadingComments" || key === "trailingComments" || key === "innerComments") continue;
@@ -45,7 +52,10 @@ function hoistDeclarations(ast) {
   }
   walk(ast);
 
-  console.log(`  Hoisted ${fnCount}fns + ${varCount}var + ${letCount}const/let in ${affected} scopes`);
+  const parts = [`${fnCount}fns`, `${varCount}var`, `${letCount}const/let`];
+  if (impCount > 0) parts.push(`${impCount}imports`);
+  if (expCount > 0) parts.push(`${expCount}exports`);
+  console.log(`  Hoisted ${parts.join(" + ")} in ${affected} scopes`);
 }
 
 // ---- simplify: combined fold+boolean+strings+ast-normalize in ONE walk ----
@@ -318,7 +328,9 @@ function normalizeShortCircuit(ast) {
           }
         }
         // var x = cond ? a : b  inside single-statement body
-        if (t.isVariableDeclaration(v) && v.kind !== "const") {
+        // Skip for-loop init — can't replace with BlockStatement
+        if (t.isVariableDeclaration(v) && v.kind !== "const" &&
+            !(k === "init" && (t.isForStatement(node) || t.isForInStatement(node) || t.isForOfStatement(node)))) {
           const splits = [];
           for (let d = 0; d < v.declarations.length; d++) {
             const decl = v.declarations[d];
@@ -1024,7 +1036,10 @@ function extractInlineFunctions(ast) {
           ...fn.params.map((p) => cloneParam(p)),
           ...extRefs.filter((r) => !fnParamNames.has(r)).map((r) => t.identifier(r)),
         ];
-        newFns.push(t.functionDeclaration(t.identifier(name), allParams, fn.body));
+        const rfFn = t.functionDeclaration(t.identifier(name), allParams, fn.body);
+        if (fn.async) rfFn.async = true;
+        if (fn.generator) rfFn.generator = true;
+        newFns.push(rfFn);
         // Replace function expression with reference
         replaceFnRef(node, "argument", fn, t.identifier(name));
       }
@@ -1039,7 +1054,10 @@ function extractInlineFunctions(ast) {
           const name = `_sub_${varName}_fn`;
           const fn = decl.init;
           const params = fn.params.map((p) => cloneParam(p));
-          newFns.push(t.functionDeclaration(t.identifier(name), params, fn.body));
+          const vFn = t.functionDeclaration(t.identifier(name), params, fn.body);
+          if (fn.async) vFn.async = true;
+          if (fn.generator) vFn.generator = true;
+          newFns.push(vFn);
           decl.init = t.identifier(name);
           count++;
         }
@@ -1112,16 +1130,117 @@ function extractInlineFunctions(ast) {
   }
 
   function cloneParam(p) {
-    if (t.isIdentifier(p)) return t.identifier(p.name);
+    if (t.isIdentifier(p)) return t.identifier(safeParam(p.name));
     return { ...p, start: undefined, end: undefined, loc: undefined };
   }
 
+  // After extraction, fix functions that need async/generator due to for-await/yield
+  for (const fn of newFns) {
+    if (!fn.async && containsForAwait(fn.body)) fn.async = true;
+    if (!fn.generator && containsYield(fn.body)) fn.generator = true;
+  }
 
   walk(ast);
   // Append newly created functions to program body
   for (const fn of newFns) ast.program.body.push(fn);
 
   console.log(`  Extracted ${count} inline function expressions`);
+}
+
+// ---- sanitizeReservedWords: rename reserved-word identifiers to safe alternatives ----
+// Obfuscated code commonly uses reserved words (let, default, if, etc.) as parameter
+// and variable names. This works in sloppy-mode parsers but breaks when downstream
+// tools re-parse the generated output. This pass runs FIRST to clean identifiers.
+function sanitizeReservedWords(ast) {
+  const RW = new Set([
+    "break", "case", "catch", "continue", "debugger", "default", "delete",
+    "do", "else", "finally", "for", "function", "if", "in", "instanceof",
+    "new", "return", "switch", "this", "throw", "try", "typeof", "var",
+    "void", "while", "with", "class", "const", "enum", "export", "extends",
+    "import", "super", "implements", "interface", "let", "package",
+    "private", "protected", "public", "static", "yield", "await", "async",
+  ]);
+
+  // Phase 1: collect every identifier already in use (to avoid collisions)
+  const allNames = new Set();
+  function scanAll(n) {
+    if (!n || typeof n !== "object") return;
+    if (t.isIdentifier(n)) allNames.add(n.name);
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) scanAll(x); }
+      else if (v && typeof v.type === "string") scanAll(v);
+    }
+  }
+  scanAll(ast);
+
+  function safeName(name) {
+    let c = "_" + name;
+    let i = 1;
+    while (allNames.has(c)) { c = "_" + name + "_" + i; i++; }
+    allNames.add(c);
+    return c;
+  }
+
+  // Phase 2: find reserved-word identifiers in binding positions
+  const map = new Map(); // original → safe
+
+  function collect(n) {
+    if (!n || typeof n !== "object") return;
+    if (t.isFunction(n)) {
+      for (const p of n.params) {
+        if (t.isIdentifier(p) && RW.has(p.name) && !map.has(p.name)) map.set(p.name, safeName(p.name));
+        else if (t.isAssignmentPattern(p) && t.isIdentifier(p.left) && RW.has(p.left.name) && !map.has(p.left.name)) map.set(p.left.name, safeName(p.left.name));
+        else collect(p); // destructured patterns
+      }
+      if (n.id && t.isIdentifier(n.id) && RW.has(n.id.name) && !map.has(n.id.name)) map.set(n.id.name, safeName(n.id.name));
+    }
+    if (t.isVariableDeclarator(n) && t.isIdentifier(n.id) && RW.has(n.id.name) && !map.has(n.id.name)) map.set(n.id.name, safeName(n.id.name));
+    if (t.isCatchClause(n) && n.param && t.isIdentifier(n.param) && RW.has(n.param.name) && !map.has(n.param.name)) map.set(n.param.name, safeName(n.param.name));
+    if (t.isClassDeclaration(n) && n.id && t.isIdentifier(n.id) && RW.has(n.id.name) && !map.has(n.id.name)) map.set(n.id.name, safeName(n.id.name));
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) collect(x); }
+      else if (v && typeof v.type === "string") collect(v);
+    }
+  }
+  collect(ast);
+
+  if (map.size === 0) return;
+
+  // Phase 3: replace all references + fix property keys
+  let refCount = 0;
+  function replace(n) {
+    if (!n || typeof n !== "object") return;
+    // Identifier → safe name
+    if (t.isIdentifier(n) && map.has(n.name)) { n.name = map.get(n.name); refCount++; return; }
+    // obj.reservedWord → obj["reservedWord"]
+    if (t.isMemberExpression(n) && !n.computed && t.isIdentifier(n.property) && RW.has(n.property.name) && !map.has(n.property.name)) {
+      n.property = t.stringLiteral(n.property.name); n.computed = true;
+    }
+    // { reservedWord } → { "reservedWord": _reservedWord } (shorthand fix)
+    if (t.isObjectProperty(n) && !n.computed && n.shorthand && t.isIdentifier(n.key) && map.has(n.key.name)) {
+      n.key = t.stringLiteral(n.key.name); n.shorthand = false;
+    }
+    // { reservedWord: ... } — key stays as string
+    if (t.isObjectProperty(n) && !n.computed && t.isIdentifier(n.key) && RW.has(n.key.name) && !n.shorthand) {
+      n.key = t.stringLiteral(n.key.name);
+    }
+    for (const k of Object.keys(n)) {
+      if (k === "start" || k === "end" || k === "loc" ||
+          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
+      const v = n[k];
+      if (Array.isArray(v)) { for (const x of v) replace(x); }
+      else if (v && typeof v.type === "string") replace(v);
+    }
+  }
+  replace(ast);
+
+  console.log(`  Renamed ${map.size} reserved-word identifiers (${refCount} refs updated)`);
 }
 
 // ---- annotateAlerts: inject [Label] comments before functions with security-relevant strings ----
@@ -1179,6 +1298,7 @@ function annotateAlerts(ast) {
 }
 
 module.exports = {
+  sanitizeReservedWords,
   hoistDeclarations,
   simplify,
   normalizeShortCircuit,
@@ -1452,7 +1572,7 @@ function inlineSingleCallerFns(ast) {
     }
   }
 
-  function cloneParam(p) { if (t.isIdentifier(p)) return t.identifier(p.name); return {...p}; }
+  function cloneParam(p) { if (t.isIdentifier(p)) return t.identifier(safeParam(p.name)); return {...p}; }
   function cloneArg(a) { if (!a||typeof a!=="object") return a; const c={}; for(const k of Object.keys(a)){if(k==='start'||k==='end'||k==='loc')continue;const v=a[k];if(Array.isArray(v)){c[k]=v.map(x=>cloneArg(x));}else if(v&&typeof v.type==='string'){c[k]=cloneArg(v);}else{c[k]=v;}}return c;}
 
   for (const stmt of ast.program.body) {

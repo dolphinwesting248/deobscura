@@ -1,6 +1,7 @@
 node_modules/
 examples/
 .claude/
+test/
 
 # Pipeline output
 *.deob/

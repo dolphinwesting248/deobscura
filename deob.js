@@ -3,17 +3,21 @@ const path = require("path");
 const fs = require("fs");
 const { main } = require("./scripts/pipeline");
 const { runMetrics } = require("./scripts/metrics");
-const { runStructure, generateCrossSummary } = require("./scripts/structure");
-const { indexDirectory } = require("./scripts/indexer");
+const { runStructure, generateCrossSummary, applyTierFilter, generateIndex } = require("./scripts/structure");
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-function collectJsFiles(dir) {
-  const results = [];
+function collectJsFilesRecursive(dir, baseDir) {
+  baseDir = baseDir || dir;
+  const results = []; // { filepath, relDir }
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    if (e.isFile() && e.name.endsWith(".js") && !e.name.startsWith(".")) {
-      results.push(path.join(dir, e.name));
+    if (e.name.startsWith(".")) continue;
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      results.push(...collectJsFilesRecursive(full, baseDir));
+    } else if (e.isFile() && e.name.endsWith(".js")) {
+      results.push({ filepath: full, relDir: path.relative(baseDir, dir) });
     }
   }
   return results;
@@ -28,61 +32,67 @@ function processOneFile(file, outDir, opts) {
 
   main({ input: file, output: outDir, split: opts.split });
 
+  if (opts.tier && opts.tier < 3) applyTierFilter(outDir, opts.tier, opts.fold);
+
   const reports = [];
   if (opts.metrics) runMetrics(file, outDir);
-  if (opts.md) reports.push(runStructure(file, outDir, "md"));
-  if (opts.json) reports.push(runStructure(file, outDir, "json"));
+  if (opts.md) reports.push(runStructure(file, outDir, { brief: true }));
+  if (opts.index) generateIndex(outDir);
   return reports;
 }
 
 function processDirectory(inputDir, outputDir, opts) {
-  const files = collectJsFiles(inputDir);
-  if (files.length === 0) {
+  const fileEntries = collectJsFilesRecursive(inputDir);
+  if (fileEntries.length === 0) {
     console.log("No .js files found in directory");
     return;
   }
 
-  console.log(`Input:  ${inputDir}/ (${files.length} files)`);
+  // Resolve filename conflicts: if two files have the same basename, prefix with parent dir
+  const nameCount = new Map();
+  for (const fe of fileEntries) {
+    const base = path.basename(fe.filepath, ".js");
+    nameCount.set(base, (nameCount.get(base) || 0) + 1);
+  }
+  function safeName(fe) {
+    const base = path.basename(fe.filepath, ".js");
+    if (nameCount.get(base) > 1) {
+      const parent = path.basename(fe.relDir || path.dirname(fe.filepath));
+      return parent + "_" + base;
+    }
+    return base;
+  }
+
+  const subDirs = [...new Set(fileEntries.map((f) => f.relDir))].filter(Boolean);
+  console.log(`Input:  ${inputDir}/ (${fileEntries.length} files${subDirs.length > 0 ? ", " + subDirs.length + " subdirs" : ""})`);
   console.log(`Output: ${outputDir}/`);
   if (opts.split) console.log("        (split mode)");
   if (opts.metrics) console.log("        + metrics report");
   if (opts.md) console.log("        + structure report (.md)");
-  if (opts.json) console.log("        + structure report (.json)");
-  if (opts.index) console.log("        + code index");
+  if (opts.index) console.log("        + compact index");
 
   const allReports = [];
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const name = path.basename(file, ".js");
+  for (let i = 0; i < fileEntries.length; i++) {
+    const fe = fileEntries[i];
+    const name = safeName(fe);
     const fileOutDir = path.join(outputDir, name);
-    const reports = processOneFile(file, fileOutDir, opts);
-    const jsonReport = reports.find((r) => r && r.summary);
-    if (jsonReport) allReports.push({ file: name, report: jsonReport });
+    const reports = processOneFile(fe.filepath, fileOutDir, opts);
+    const structReport = reports.find((r) => r && r.summary);
+    if (structReport) allReports.push({ file: name, report: structReport, srcPath: fe.relDir ? path.join(fe.relDir, path.basename(fe.filepath)) : path.basename(fe.filepath) });
   }
 
   // Cross-file summary
-  if ((opts.md || opts.json) && allReports.length > 0) {
+  if (opts.md && allReports.length > 0) {
     console.log(`\nGenerating cross-file summary...`);
-    if (opts.md) {
-      const summary = generateCrossSummary(allReports, path.basename(outputDir), "md");
-      fs.writeFileSync(path.join(outputDir, "summary.md"), summary, "utf-8");
-      console.log(`  Summary report: ${path.join(outputDir, "summary.md")}`);
-    }
-    if (opts.json) {
-      const summary = generateCrossSummary(allReports, path.basename(outputDir), "json");
-      fs.writeFileSync(path.join(outputDir, "summary.json"), summary, "utf-8");
-      console.log(`  Summary report: ${path.join(outputDir, "summary.json")}`);
-    }
+    const summary = generateCrossSummary(allReports);
+    fs.writeFileSync(path.join(outputDir, "summary.md"), summary, "utf-8");
+    console.log(`  Summary report: ${path.join(outputDir, "summary.md")}`);
   }
 
-  // Build combined code index
+  // Cross-file index
   if (opts.index) {
-    console.log("\nIndexing output directory...");
-    const stats = indexDirectory(outputDir);
-    if (stats) {
-      console.log(`  ${stats.nodes} nodes, ${stats.edges} edges across ${stats.files} files (${stats.durationMs}ms)`);
-    }
+    generateIndex(outputDir);
   }
 }
 
@@ -92,23 +102,20 @@ function processSingleFile(inputPath, outputDir, opts) {
   if (opts.split) console.log("        (split mode)");
   if (opts.metrics) console.log("        + metrics report");
   if (opts.md) console.log("        + structure report (.md)");
-  if (opts.json) console.log("        + structure report (.json)");
-  if (opts.index) console.log("        + code index");
+  if (opts.index) console.log("        + compact index");
+  if (opts.tier < 3) {
+    const s = opts.fold ? " + fold" : "";
+    console.log(`        (tier ${opts.tier}${s} output)`);
+  }
   console.log("");
 
   main({ input: inputPath, output: outputDir, split: opts.split });
 
-  if (opts.metrics) runMetrics(inputPath, outputDir);
-  if (opts.md) runStructure(inputPath, outputDir, "md");
-  if (opts.json) runStructure(inputPath, outputDir, "json");
+  if (opts.tier && opts.tier < 3) applyTierFilter(outputDir, opts.tier, opts.fold);
 
-  if (opts.index) {
-    console.log("Indexing output directory...");
-    const stats = indexDirectory(outputDir);
-    if (stats) {
-      console.log(`  ${stats.nodes} nodes, ${stats.edges} edges across ${stats.files} files (${stats.durationMs}ms)`);
-    }
-  }
+  if (opts.metrics) runMetrics(inputPath, outputDir);
+  if (opts.md) runStructure(inputPath, outputDir);
+  if (opts.index) generateIndex(outputDir);
 }
 
 function defaultOutDir(inputPath) {
@@ -143,8 +150,9 @@ function parseConfig(filepath) {
     split: !!cfg.split,
     metrics: !!cfg.metrics,
     md: !!cfg.md,
-    json: !!cfg.json,
     index: !!cfg.index,
+    tier: cfg.tier != null ? cfg.tier : 3,
+    fold: !!cfg.fold,
   };
 }
 
@@ -159,12 +167,15 @@ module.exports = {
   // Output directory (optional — auto-derived from input if omitted)
   // output: "out/",
 
-  // Feature flags — enable the reports you need
-  split: false,   // per-function file output
+  // Feature flags
+  split: false,  // per-function file output
   metrics: false, // HTML readability comparison report
   md: true,       // Markdown structure report
-  json: false,    // JSON structure report
-  index: false,   // SQLite code intelligence index
+  index: false,   // compact index.txt for LLM navigation
+
+  // LLM-oriented output tuning
+  tier: 3,        // 1=alerts+hotspots only, 2=+callees, 3=all functions
+  fold: false,    // collapse mechanical functions (polyfill/pure compute/forward) to comments
 };
 `;
 
@@ -181,10 +192,8 @@ function initConfig(force) {
 // ── CLI parsing ──────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
-const configIdx = args.indexOf("--config");
-const hasConfig = configIdx !== -1 && configIdx + 1 < args.length;
 
-// Handle `init` subcommand before anything else
+// Handle `init` subcommand
 if (args[0] === "init") {
   initConfig(args.includes("--force"));
   process.exit(0);
@@ -192,31 +201,23 @@ if (args[0] === "init") {
 
 if (args.includes("--help") || args.includes("-h")) {
   console.log("deob — universal JS deobfuscation pipeline\n");
-  console.log("Usage: deob                            # auto-detect deob.config.js");
-  console.log("       deob <input> [output-dir] [options]");
-  console.log("       deob --config <path>");
-  console.log("       deob init [--force]\n");
-  console.log("Commands:");
-  console.log("  init          generate deob.config.js in current directory");
-  console.log("  init --force  overwrite existing config\n");
-  console.log("Options:");
-  console.log("  --split      split output into per-function files");
-  console.log("  --metrics    generate HTML readability metrics report");
-  console.log("  --md         generate Markdown structure report");
-  console.log("  --json       generate JSON structure report");
-  console.log("  --index      build code index for AI-assisted exploration");
-  console.log("  --config     use config file (ignores other flags)\n");
-  console.log("Config format:");
+  console.log("Usage: deob                       # auto-detect deob.config.js");
+  console.log("       deob init [--force]        # generate config file");
+  console.log("       deob --config <path>       # use specific config");
+  console.log("       deob -c <path>             # shorthand for --config\n");
+  console.log("Config format (deob.config.js):");
   console.log("  module.exports = {");
-  console.log("    input: 'main.js',           // file, directory, or array");
-  console.log("    output: 'out/',             // optional");
-  console.log("    split: true, metrics: true, // flags");
-  console.log("    md: true, json: true, index: true");
+  console.log("    input: 'main.js',             // file, directory, or array");
+  console.log("    output: 'out/',               // optional");
+  console.log("    split: false, metrics: false,");
+  console.log("    md: true, index: false,");
+  console.log("    tier: 3, fold: false,    // tier: 1|2|3, fold: collapse polyfill/forward/compute");
+
   console.log("  };\n");
   console.log("Examples:");
-  console.log("  deob main.js --split --md");
-  console.log("  deob src/ --md --json");
-  console.log("  deob --config deob.config.js");
+  console.log("  deob                        # uses deob.config.js in cwd");
+  console.log("  deob init                   # create deob.config.js");
+  console.log("  deob --config prod.config.js");
   process.exit(0);
 }
 
@@ -238,35 +239,20 @@ function runWithConfig(configPath) {
   }
 }
 
+// Determine config path
+const ci = args.indexOf("--config");
+const ciShort = args.indexOf("-c");
+const configIdx = ci !== -1 ? ci : ciShort;
+const hasConfig = configIdx !== -1 && configIdx + 1 < args.length;
+
 if (hasConfig) {
   runWithConfig(args[configIdx + 1]);
-} else if (!hasConfig && args.length === 0 && fs.existsSync("deob.config.js")) {
-  // No arguments, auto-detect deob.config.js in cwd
+} else if (args.length === 0 && fs.existsSync("deob.config.js")) {
   runWithConfig("deob.config.js");
+} else if (args.length === 0) {
+  console.log("No deob.config.js found. Run 'deob init' to create one.");
+  process.exit(1);
 } else {
-  // CLI mode — parse flags and positional args
-  const flags = new Set(args.filter((a) => a.startsWith("--")));
-  const opts = {
-    split: flags.has("--split"),
-    metrics: flags.has("--metrics"),
-    md: flags.has("--md"),
-    json: flags.has("--json"),
-    index: flags.has("--index"),
-  };
-  const filtered = args.filter((a) => !a.startsWith("--"));
-  const inputPath = filtered[0];
-
-  if (!inputPath) {
-    console.log("No input specified. Use --help for usage.");
-    process.exit(0);
-  }
-
-  const isDir = fs.existsSync(inputPath) && fs.statSync(inputPath).isDirectory();
-  const outputDir = filtered[1] || defaultOutDir(inputPath);
-
-  if (isDir) {
-    processDirectory(inputPath, outputDir, opts);
-  } else {
-    processSingleFile(inputPath, outputDir, opts);
-  }
+  console.log("Unknown arguments. Usage: deob [--config <path>]  or  deob init");
+  process.exit(1);
 }
