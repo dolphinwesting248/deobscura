@@ -167,9 +167,6 @@ function parseConfig(filepath) {
 
 // ── init command ─────────────────────────────────────────────────────
 const CONFIG_TEMPLATE = `
-/// <reference path="./scripts/config-types.d.ts" />
-
-/** @type {import('./scripts/config-types').DeobConfig} */
 module.exports = {
   // Input: a single file, a directory, or an array of paths
   input: "src/main.js",
@@ -188,15 +185,24 @@ module.exports = {
   tier: 3,        // 1=alerts+hotspots only, 2=+callees, 3=all functions
   fold: false,    // collapse mechanical functions (polyfill/pure compute/forward) to comments
 
-  // Alert denoising — downgrade false-positive alerts (see docs/tier-and-fold.md)
-  // Set to [] to disable all denoising, or remove entries you don't need
+  // Alert denoising — downgrade false-positive alerts.
+  // Each rule: { match: regex, label: "new label", severity?: "low"|"medium"|... }
+  // Set to [] to disable all denoising, or omit to use defaults (shown below).
   denoise: [
+    // Single-char hostname → test data (e.g. http://a, https://b/c)
     { match: "https?://[a-zA-Z](/|$)",     label: "Test URL",       severity: "low" },
+    // Documentation domains → code comment or reference link
     { match: "github\\\\.io|mozilla\\\\.org", label: "Doc URL",     severity: "low" },
+    // Loopback / local dev server
     { match: "localhost|127\\\\.0\\\\.0\\\\.1", label: "Local URL", severity: "low" },
+    // Placeholder / example domains
     { match: "example\\\\.com|test\\\\.com",  label: "Placeholder URL", severity: "low" },
   ],
 };
+
+// For TypeScript IDE support, copy scripts/config-types.d.ts to your project and add:
+// /// <reference path="./config-types.d.ts" />
+// /** @type {import('./config-types').DeobConfig} */ module.exports = { ... };
 `;
 
 function initConfig(force) {
