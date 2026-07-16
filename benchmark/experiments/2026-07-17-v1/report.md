@@ -63,9 +63,9 @@ _Creamy = deob, orange = raw. Gap explodes from scenario D onward._
 deob **1.2x** | 3 API endpoints vs raw's 1
 
 ```
-         Function  Endpoint  Security  Total
-  deob    0.38      1.00      0.31      0.55
-  raw     0.46      0.33      0.17      0.48
+         Purpose  Functions  Endpoints  Security  DataFlow  Vars  Total
+  deob    0.17     0.38       1.00       0.31      0.60      1.00   0.55
+  raw     0.58     0.46       0.33       0.17      0.50      1.00   0.48
 ```
 
 **What happened**: Both agents identified the login and profile functions. Deob correctly found all 3 API endpoints (`POST /auth/login`, `GET /users/:id`, `PUT /users/:id`) while raw only found 1. The gap is small because simple renameGlobals + base64 string obfuscation doesn't block raw analysis much.
@@ -77,9 +77,9 @@ deob **1.2x** | 3 API endpoints vs raw's 1
 deob **1.3x** | Functions 2.5x better
 
 ```
-         Function  Endpoint  Security  Total
-  deob    0.39      1.00      0.00      0.42
-  raw     0.16      1.00      0.00      0.33
+         Purpose  Functions  Endpoints  Security  DataFlow  Vars  Total
+  deob    0.56     0.39       1.00       0.00      0.52      0.00   0.42
+  raw     0.44     0.16       1.00       0.00      0.39      0.00   0.33
 ```
 
 **What happened**: The control-flow flattened `authenticate()` function was split into 20 `_S_` sub-functions by deob. Deob correctly identified `hashPassword`, `generateToken`, `getStoredHash`, etc. Raw struggled with the while+switch dispatcher — it could only trace 3-4 functions through the spaghetti.
@@ -93,9 +93,9 @@ deob **1.3x** | Functions 2.5x better
 deob **1.1x** — smallest gap
 
 ```
-         Function  Endpoint  Security  Total
-  deob    0.78      1.00      1.00      0.84
-  raw     0.62      1.00      1.00      0.79
+         Purpose  Functions  Endpoints  Security  DataFlow  Vars  Total
+  deob    0.60     0.78       1.00       1.00      0.45      1.00   0.84
+  raw     0.60     0.62       1.00       1.00      0.48      1.00   0.79
 ```
 
 **What happened**: This was the anomaly — both agents performed well. The data pipeline has no security-sensitive code (no API calls, no credentials). The task was purely structural: identify the filter→map→group→sort→stats pipeline. Raw could trace this through the obfuscation because the flow is linear.
@@ -107,9 +107,9 @@ deob **1.1x** — smallest gap
 deob **4.6x** — largest gap
 
 ```
-         Function  Endpoint  Security  Total
-  deob    0.82      1.00      0.38      0.77
-  raw     0.17      0.00      0.16      0.17
+         Purpose  Functions  Endpoints  Security  DataFlow  Vars  Total
+  deob    0.88     0.82       1.00       0.38      0.58      1.00   0.77
+  raw     0.00     0.17       0.00       0.16      0.34      0.00   0.17
 ```
 
 **What happened**: Raw agent nearly completely failed. The 42KB webpack bundle with all obfuscation techniques (RC4 strings, flattening, selfDefending, unicodeEscape) was impenetrable. Raw took 400 seconds and still couldn't identify any endpoints or meaningful functions.
@@ -123,9 +123,9 @@ Deob extracted 30 sub-functions, decoded 887 string constants, and correctly ide
 deob **2.2x** | Endpoint: raw found 0, deob found 1
 
 ```
-         Function  Endpoint  Security  Total
-  deob    0.37      1.00      0.40      0.63
-  raw     0.29      0.00      0.18      0.29
+         Purpose  Functions  Endpoints  Security  DataFlow  Vars  Total
+  deob    0.85     0.37       1.00       0.40      0.58      1.00   0.63
+  raw     0.62     0.29       0.00       0.18      0.50      0.00   0.29
 ```
 
 **What happened**: The 63KB payment module with max-settings obfuscation was the largest file. Deob extracted 44 sub-functions and decoded 1,622 strings. Raw spent 255 seconds and couldn't find the payment API endpoint or identify the Luhn algorithm.
