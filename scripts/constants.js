@@ -209,6 +209,60 @@ const NAMING_HINTS = {
   fn: "inline function",
 };
 
+// ---- Domain Classification Rules ----
+// Simple regex → tag rules for classifyDomain(). Order matters: specific before generic.
+const DOMAIN_RULES = [
+  // Bundlers
+  { tag: "rspack/webpack chunk", regex: /\bself\.(rspack|webpack)(Chunk|_require_)/ },
+  { tag: "webpack bundle", regex: /\b__webpack_require__\b|\b__webpack_modules__\b/, exclusive: true },
+  { tag: "turbopack runtime", regex: /\bTURBOPACK\b|\bturbopack\b/ },
+  { tag: "CommonJS", regex: /\bmodule\.exports\b|\bexports\[/, extra: /\brequire\s*\(/ },
+  { tag: "AMD", regex: /\bdefine\s*\(\s*(['"]|function)/ },
+  // Frameworks
+  { tag: "Vue", regex: /\b__VUE__\b|\bvue\b.*\breactive\b|\bVue\b.*\bcomponent\b/i },
+  { tag: "React", regex: /\b__REACT_DEVTOOLS_GLOBAL_HOOK__\b|\bReactDOM\b/ },
+  { tag: "Angular", regex: /\b__ANGULAR__\b|\bNgModule\b|\bzone\.js\b/ },
+  { tag: "Svelte", regex: /\b__svelte\b|\bSvelte\b.*\bcompile\b/i },
+  { tag: "Next.js", regex: /\b__NEXT_DATA__\b|\b__next\b/ },
+  { tag: "Nuxt", regex: /\b__nuxt\b|\bNuxt\b/ },
+  // Module runtimes
+  { tag: "Worker runtime", regex: /\bimportScripts\b|\bWorker\b.*\bimport\b/i },
+  { tag: "Node.js", regex: /\bprocess\.(?!env)/ },
+  // DOM & Events
+  { tag: "DOM manipulation", regex: /\binnerHTML\b|\bcreateElement\b|\bappendChild\b|\bquerySelector\b|\bgetElementById\b/ },
+  { tag: "Event-driven", regex: /\baddEventListener\b/, minCount: 3 },
+  // Security-relevant
+  { tag: "Crypto", regex: /\b(crypto|encrypt|decrypt|hmac|md5|sha\d+)\b/i },
+  { tag: "Signing", regex: /\b(sign\w*(?:V2|Init|Request)?\s*\(|xhsSign|_sign\b|signKey)\b/i },
+  { tag: "Protobuf", regex: /\b(protobuf|protobufjs|\.(?:encode|decode|verify|fromObject|toObject)\s*\()/, exclude: /\b(Text(?:Encoder|Decoder)|encodeURI(?:Component)?|decodeURI(?:Component)?)\b/ },
+  { tag: "WebSocket", regex: /\b(websocket|ws\b\.|gateway|socket\.io|Reconnect)|WebSocket\b/i },
+  { tag: "Graphics", regex: /\bWebGL\b|\bgetContext\s*\(\s*['"]2d['"]\s*\)|drawImage\b|createTexture\b/i },
+  // Polyfills
+  { tag: "Prototype-patched", regex: /\bprototype\s*\.\s*\w+\s*=/ },
+  { tag: "Polyfill/Core-JS", regex: /\b(ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor|CreateMethodProperty|__core-js_shared__)\b/ },
+];
+
+// ---- Function Category Rules (for categorizeFn) ----
+// Simple regex → category rules. Checked in order; first match wins.
+const CATEGORY_RULES = [
+  { category: "network", regex: /\b(axios|fetch|xhr\b|XMLHttpRequest|User-Agent|responseType|rateLimit|FormData|x-www-form)\b/i },
+  { category: "websocket", regex: /\b(websocket|ws\.|readyState|WebSocket|handshake|close code|terminate|ping\b|pong\b|subprotocol|permessage-deflate|_socket\b)\b/i },
+  { category: "crypto", regex: /\b(crypto|sha512|sha256|hmac|md5|encrypt|decrypt|sign\b|cipher\b|hash\b|randomBytes|pbkdf2)\b/i },
+  { category: "parser", regex: /\b(yaml|parser|scalar|blockMap|blockSeq|flowSeq|resolved\b|YAML\b)\b/i },
+  { category: "i18n", regex: /\b(i18n|i18next|translat|lng\b|interpolat|plural|namespace|resStore|ns\b)\b/i },
+  { category: "polyfill", regex: /\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__|ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor)\b/i },
+  { category: "filesystem", regex: /\b(fs\.|fse\.|chmod|chown|statSync|mkdir|readFile|writeFile|copyFile|unlink|Buffer\.|glob\b|readdir|rmSync)\b/i },
+  { category: "boilerplate", regex: /\b(__esModule|Object\.defineProperty|d\s*\(\s*exports|exports\s*\[)\b/ },
+];
+
+// ---- Framework Detection Patterns (for categorizeFn, checked BEFORE CATEGORY_RULES) ----
+const FRAMEWORK_PATTERNS = [
+  /\b(Vue\b.*\bcomponent|\$__vue__|__vue__|Vue\.util|Observer|Dep\.prototype|Watcher\b.*\bvm)\b/,
+  /\b(ReactDOM\b|__REACT_DEVTOOLS|ReactCurrentOwner|enqueueSetState|scheduleWork)\b/,
+  /\b(regeneratorRuntime\b|asyncToGenerator|_asyncToGenerator)\b/,
+  /\b(VueRouter\b|HashHistory|HTML5History|AbstractHistory|createRoute)\b/,
+];
+
 module.exports = {
   // Core constants
   RESERVED,
@@ -239,4 +293,8 @@ module.exports = {
   NAMING_COLLISION,
   NAMING_EXAMPLES,
   NAMING_HINTS,
+  // Domain & Category rules
+  DOMAIN_RULES,
+  CATEGORY_RULES,
+  FRAMEWORK_PATTERNS,
 };

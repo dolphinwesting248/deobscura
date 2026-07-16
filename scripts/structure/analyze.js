@@ -1,7 +1,7 @@
 // Core analysis functions for structure report
 const { parser, t, fs, path } = require("../config");
 const { ALERT_PATTERNS } = require("../constants");
-const { DEFAULT_PARSER_OPTS, JSX_PARSER_OPTS, SUB_FN_PREFIX, SUB_FN_NAME_RE, isSubFn, SKIP_KEYS, THRESHOLDS, CATEGORIES, SEVERITY, NAMING_FORMAT, NAMING_COLLISION, NAMING_EXAMPLES, NAMING_HINTS } = require("../constants");
+const { DEFAULT_PARSER_OPTS, JSX_PARSER_OPTS, SUB_FN_PREFIX, SUB_FN_NAME_RE, isSubFn, SKIP_KEYS, THRESHOLDS, CATEGORIES, SEVERITY, NAMING_FORMAT, NAMING_COLLISION, NAMING_EXAMPLES, NAMING_HINTS, DOMAIN_RULES, CATEGORY_RULES, FRAMEWORK_PATTERNS } = require("../constants");
 
 // Simple cache: avoid re-parsing the same file in a single run
 const _analysisCache = new Map();
@@ -864,44 +864,32 @@ function classifyDomain(filepath) {
   try {
     const src = fs.readFileSync(filepath, "utf-8");
     const tags = [];
-    // Bundlers — check FIRST, take priority
-    if (/\bself\.(rspack|webpack)(Chunk|_require_)/.test(src)) tags.push("rspack/webpack chunk");
-    else if (/\b__webpack_require__\b|\b__webpack_modules__\b/.test(src)) tags.push("webpack bundle");
-    if (/\bTURBOPACK\b|\bturbopack\b/.test(src)) tags.push("turbopack runtime");
-    if (/\bmodule\.exports\b|\bexports\[/.test(src) && /\brequire\s*\(/.test(src)) tags.push("CommonJS");
-    if (/\bdefine\s*\(\s*(['"]|function)/.test(src)) tags.push("AMD");
-    // Framework detection — before generic DOM/network
-    if (/\b__VUE__\b|\bvue\b.*\breactive\b|\bVue\b.*\bcomponent\b/i.test(src)) tags.push("Vue");
-    if (/\b__REACT_DEVTOOLS_GLOBAL_HOOK__\b|\bReactDOM\b/.test(src)) tags.push("React");
-    if (/\b__ANGULAR__\b|\b@NgModule\b|\bzone\.js\b/i.test(src)) tags.push("Angular");
-    if (/\b__svelte\b|\bSvelte\b.*\bcompile\b/i.test(src)) tags.push("Svelte");
-    if (/\b__NEXT_DATA__\b|\b__next\b/i.test(src)) tags.push("Next.js");
-    if (/\b__nuxt\b|\bNuxt\b/i.test(src)) tags.push("Nuxt");
-    // Module runtimes
-    if (/\bimportScripts\b|\bWorker\b.*\bimport\b/i.test(src)) tags.push("Worker runtime");
-    if (/\bprocess\.(?!env)/.test(src)) tags.push("Node.js");
-    // DOM — require specific manipulation patterns, not just window/document
-    if (/\binnerHTML\b|\bcreateElement\b|\bappendChild\b|\bquerySelector\b|\bgetElementById\b/.test(src)) tags.push("DOM manipulation");
-    if (/\baddEventListener\b/.test(src) && (src.match(/\baddEventListener\b/g) || []).length > 3) tags.push("Event-driven");
-    // Network — require actual HTTP client patterns
+
+    for (const rule of DOMAIN_RULES) {
+      // Exclusive: skip if tags already contain a webpack match
+      if (rule.exclusive && tags.some(t => t.includes("webpack"))) continue;
+      // Extra: CommonJS needs require() too
+      if (rule.extra && !rule.extra.test(src)) continue;
+      // Exclude: Protobuf vs TextEncoder
+      if (rule.exclude && rule.exclude.test(src)) continue;
+      // MinCount: Event-driven needs > N matches
+      if (rule.minCount) {
+        const count = (src.match(rule.regex) || []).length;
+        if (count <= rule.minCount) continue;
+      }
+      if (rule.regex.test(src)) tags.push(rule.tag);
+    }
+
+    // Compound rules
     const hasFetch = /\bfetch\s*\(/.test(src);
     const hasXHR = /\bXMLHttpRequest\b/.test(src);
     const hasAxios = /\baxios\b/.test(src);
-    if ((hasFetch && hasXHR) || hasAxios || (hasFetch && /https?:\/\/[^\s"']+/g.test(src))) tags.push("Network");
-    if (/\b(crypto|encrypt|decrypt|hmac|md5|sha\d+)\b/i.test(src)) tags.push("Crypto");
-    // Specific domain signatures
-    if (/\b(sign\w*(?:V2|Init|Request)?\s*\(|xhsSign|_sign\b|signKey)\b/i.test(src)) tags.push("Signing");
+    if ((hasFetch && (hasXHR || /https?:\/\/[^\s"']+/.test(src))) || hasAxios) tags.push("Network");
     const apiPaths = (src.match(/\/api\//g) || []).length;
     if (apiPaths > 5) tags.push("API Router");
-    if (/\b(protobuf|protobufjs|\.(?:encode|decode|verify|fromObject|toObject)\s*\()/.test(src) &&
-        !/\b(Text(?:Encoder|Decoder)|encodeURI(?:Component)?|decodeURI(?:Component)?)\b/.test(src)) tags.push("Protobuf");
-    if (/\b(websocket|ws\b\.|gateway|socket\.io|Reconnect)|WebSocket\b/i.test(src)) tags.push("WebSocket");
-    // Graphics — require specific rendering API patterns
-    if (/\bWebGL\b|\bgetContext\s*\(\s*['"]2d['"]\s*\)|drawImage\b|createTexture\b/i.test(src)) tags.push("Graphics");
-    if (/\bprototype\s*\.\s*\w+\s*=/.test(src)) tags.push("Prototype-patched");
-    if (/\b(ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor|CreateMethodProperty|__core-js_shared__)\b/.test(src)) tags.push("Polyfill/Core-JS");
     const evals = (src.match(/\beval\s*\(/g) || []).length;
     if (evals > 5) tags.push("Eval-heavy");
+
     return tags.length > 0 ? tags.join(" + ") : "General JS";
   } catch (e) {
     return "Unknown";
@@ -917,23 +905,18 @@ function categorizeFn(name, fn, meta) {
   const desc = fn.description || "";
 
   // Framework detection — tag known framework internals
-  if (/\b(Vue\b.*\bcomponent|\$__vue__|__vue__|Vue\.util|Observer|Dep\.prototype|Watcher\b.*\bvm)\b/.test(src)) return "framework";
-  if (/\b(ReactDOM\b|__REACT_DEVTOOLS|ReactCurrentOwner|enqueueSetState|scheduleWork)\b/.test(src)) return "framework";
-  if (/\b(regeneratorRuntime\b|asyncToGenerator|_asyncToGenerator)\b/.test(src)) return "framework";
-  if (/\b(VueRouter\b|HashHistory|HTML5History|AbstractHistory|createRoute)\b/.test(src)) return "framework";
+  for (const pattern of FRAMEWORK_PATTERNS) {
+    if (pattern.test(src)) return "framework";
+  }
 
   // Domain-specific checks FIRST — take priority over structural patterns
   if (labels && labels.has("Network")) return "network";
   if (labels && labels.has("Crypto")) return "crypto";
   if (labels && labels.has("Eval / Dynamic")) return "dynamic";
 
-  if (/\b(axios|fetch|xhr\b|XMLHttpRequest|User-Agent|responseType|rateLimit|FormData|x-www-form)\b/i.test(src)) return "network";
-  if (/\b(websocket|ws\.|readyState|WebSocket|handshake|close code|terminate|ping\b|pong\b|subprotocol|permessage-deflate|_socket\b)\b/i.test(src)) return "websocket";
-  if (/\b(crypto|sha512|sha256|hmac|md5|encrypt|decrypt|sign\b|cipher\b|hash\b|randomBytes|pbkdf2)\b/i.test(src)) return "crypto";
-  if (/\b(yaml|parser|scalar|blockMap|blockSeq|flowSeq|resolved\b|YAML\b)\b/i.test(src)) return "parser";
-  if (/\b(i18n|i18next|translat|lng\b|interpolat|plural|namespace|resStore|ns\b)\b/i.test(src)) return "i18n";
-  if (/\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__|ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor)\b/i.test(src)) return "polyfill";
-  if (/\b(fs\.|fse\.|chmod|chown|statSync|mkdir|readFile|writeFile|copyFile|unlink|Buffer\.|glob\b|readdir|rmSync)\b/i.test(src)) return "filesystem";
+  for (const rule of CATEGORY_RULES) {
+    if (rule.regex.test(src)) return rule.category;
+  }
 
   // Behavioral descriptors
   if (/_setTimeout|_setInterval|_debounce|_throttle/.test(name)) return "timer";
