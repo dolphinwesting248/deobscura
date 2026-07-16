@@ -1,7 +1,7 @@
 // Inlining passes
 
 const { t } = require("../config");
-const { SKIP_KEYS, isSubFn } = require("../constants");
+const { SKIP_KEYS, isSubFn, SUB_FN_PREFIX } = require("../constants");
 const { clone, containsYield, containsForAwait } = require("../ast-utils");
 const { collectDefined, getExternalRefs } = require("../scope");
 const { safeParam } = require("../emit");
