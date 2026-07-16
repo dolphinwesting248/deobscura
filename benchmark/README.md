@@ -222,6 +222,62 @@ BENCH_EXP_DIR=/path/to/experiment node tools/score.js --all
 | Variables | 10% | Value/purpose matching |
 | EntryPoint | 5% | Existence check |
 
+## Writing the Report
+
+Use this framework for `report.md`. Keep each section concise — data drives the narrative.
+
+```
+# Benchmark Report · YYYY-MM-DD
+
+**N scenarios · N runs · scoring method**
+
+## 1. Executive Summary
+- One-sentence takeaway (bold quote)
+- Key numbers table (Total score, Endpoints, Functions, Security)
+- Mermaid bar chart: deob vs raw scores per scenario
+
+## 2. Experiment Design
+- Goal (one line)
+- Method (one paragraph)
+- Scoring weights (table)
+- Scenario table: # | Domain | Level | Techniques
+
+## 3. Per-Scenario Results
+For each scenario:
+  ### X. Name (Difficulty)
+  - One-line result: deob Nx | key finding
+  - Score table (deob vs raw per dimension)
+  - What happened (2-3 sentences)
+  - Why deob helped/didn't (1-2 sentences)
+
+## 4. Aggregate Analysis
+- By Difficulty: table + pie chart (where deob adds value)
+- By Dimension: table + pie chart (biggest gaps)
+- By Technique: table (which techniques hurt raw most)
+
+## 5. Key Findings
+- 4-6 bullet points: what deob does best + where it struggles
+- Mermaid gantt chart: time comparison
+
+## 6. Limitations
+- 3-5 known issues with methodology or scoring
+
+## 7. Conclusions
+- Where deob matters most / least
+- Next steps for deob project
+```
+
+### Mermaid Charts to Include
+
+| Chart | Type | Placement | Purpose |
+|-------|------|-----------|---------|
+| Score comparison | `xychart-beta` bar | Executive Summary | deob vs raw per scenario |
+| Value distribution | `pie` | By Difficulty | Easy/Medium vs Hard contribution |
+| Endpoint detection | `pie` | By Dimension | deob found vs raw found vs missed |
+| Time comparison | `gantt` | Key Findings | Analysis time per scenario |
+
+_Use `graph LR` with styled nodes as fallback if `xychart-beta` doesn't render._
+
 ## Dependencies
 
 ```bash
