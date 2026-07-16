@@ -31,6 +31,10 @@ function createSubFn(name, params, body, sourceNode) {
   );
   if (containsAwait(fn.body) || containsForAwait(fn.body)) fn.async = true;
   if (containsYield(fn.body)) fn.generator = true;
+  // Preserve original source location for banner metadata
+  if (sourceNode && sourceNode.loc) {
+    fn.loc = sourceNode.loc;
+  }
   addLineComment(fn, sourceNode);
   return fn;
 }
