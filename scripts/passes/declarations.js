@@ -232,7 +232,6 @@ function annotateAlerts(ast) {
 // General: topological sort so callees appear before callers.
 function sortByCallTree(ast) {
   // Build adjacency: who calls whom (among _S_ functions)
-  const calls = new Map(); // callerName -> [calleeName]
   const allNames = new Set();
 
   for (const stmt of ast.program.body) {
@@ -241,11 +240,12 @@ function sortByCallTree(ast) {
     }
   }
 
+  const callSets = new Map(); // callerName -> Set<calleeName>
   function collectEdges(node, enclosingFn) {
     if (!node || typeof node !== "object") return;
     if (t.isCallExpression(node) && t.isIdentifier(node.callee) && allNames.has(node.callee.name) && enclosingFn) {
-      if (!calls.has(enclosingFn)) calls.set(enclosingFn, []);
-      if (!calls.get(enclosingFn).includes(node.callee.name)) calls.get(enclosingFn).push(node.callee.name);
+      if (!callSets.has(enclosingFn)) callSets.set(enclosingFn, new Set());
+      callSets.get(enclosingFn).add(node.callee.name);
     }
     for (const k of Object.keys(node)) {
       if (k === "start" || k === "end" || k === "loc" ||
@@ -261,6 +261,10 @@ function sortByCallTree(ast) {
       collectEdges(stmt.body, stmt.id.name);
     }
   }
+
+  // Convert sets to arrays for the rest of the algorithm
+  const calls = new Map();
+  for (const [k, v] of callSets) calls.set(k, [...v]);
 
   // Topological sort (Kahn's algorithm)
   const inDegree = new Map();
@@ -283,6 +287,7 @@ function sortByCallTree(ast) {
   }
 
   // Sort _S_ functions: leaves first (inDegree=0), then dependents
+  const subFnMap = new Map(subFns.map(f => [f.id.name, f]));
   const queue = subFns.filter(f => (inDegree.get(f.id.name) || 0) === 0);
   const sorted = [];
   const visited = new Set(queue.map(f => f.id.name));
@@ -296,7 +301,7 @@ function sortByCallTree(ast) {
         inDegree.set(c, (inDegree.get(c) || 1) - 1);
         if (inDegree.get(c) === 0 && !visited.has(c)) {
           visited.add(c);
-          const fnNode = subFns.find(f => f.id.name === c);
+          const fnNode = subFnMap.get(c);
           if (fnNode) queue.push(fnNode);
         }
       }
