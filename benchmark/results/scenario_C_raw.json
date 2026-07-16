@@ -1,0 +1,16 @@
+{
+  "purpose": "Parses a JSON array of user records, filters valid entries by id/displayName/email, normalizes fields (trim/lowercase), extracts email domain, groups users by domain, sorts each group alphabetically, and produces grouped data with summary statistics.",
+  "functions": [
+    {"name":"processUserData","purpose":"Main pipeline: validate, filter, normalize, group, sort, stats","calls":["JSON.parse","filter","map","forEach","sort"],"calledBy":["external"]},
+    {"name":"filter validator","purpose":"Check if item has id, name, and email","calls":[],"calledBy":["processUserData"]},
+    {"name":"transform mapper","purpose":"Normalize fields: trim, lowercase, extract domain, format date","calls":[],"calledBy":["processUserData"]},
+    {"name":"sortGroup","purpose":"Sort each domain group alphabetically by displayName","calls":[],"calledBy":["processUserData"]},
+    {"name":"stats calculator","purpose":"Compute total, validDomains, topDomain, invalidCount","calls":[],"calledBy":["processUserData"]}
+  ],
+  "endpoints": [],
+  "security": [],
+  "dataFlow": "JSON string → parse → filter (id/name/email) → map (normalize fields, extract domain) → group by domain → sort groups → compute stats → output",
+  "variables": [],
+  "entryPoint": "processUserData function",
+  "functionCount": 5
+}

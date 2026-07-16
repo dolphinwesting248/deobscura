@@ -3,7 +3,7 @@ You are a JavaScript reverse engineer. Analyze obfuscated JavaScript code.
 The code is obfuscated with: variable renaming, string encoding, control flow flattening,
 dead code injection, and self-defending techniques.
 
-Read the obfuscated file: E:\deob\benchmark\scenarios\B\obfuscated.js
+Read the obfuscated file: \benchmark\scenarios\B\obfuscated.js
 
 First, try to understand the structure:
 - Find the string decoding function (look for a function called early that returns array elements)

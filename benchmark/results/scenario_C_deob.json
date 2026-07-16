@@ -1,0 +1,20 @@
+{
+  "purpose": "Data processing pipeline that filters, transforms, groups, and aggregates JSON user records by domain with statistics output.",
+  "functions": [
+    {"name":"processUserData","purpose":"Core pipeline: parse JSON, filter valid records, normalize fields, group by domain, sort groups, compute stats","calls":["parse","filter","map","forEach","sort"],"calledBy":[]},
+    {"name":"filter validator","purpose":"Check if item has id, displayName, and email fields","calls":[],"calledBy":["processUserData (Array.filter)"]},
+    {"name":"transform mapper","purpose":"Normalize fields: trim/lowercase name, lowercase email, extract domain, format date","calls":[],"calledBy":["processUserData (Array.map)"]},
+    {"name":"sortGroup","purpose":"Sort each domain group alphabetically by displayName","calls":[],"calledBy":["processUserData"]},
+    {"name":"stats calculator","purpose":"Compute total, validDomains, topDomain, invalidCount","calls":[],"calledBy":["processUserData"]}
+  ],
+  "endpoints": [],
+  "security": [
+    {"severity":"high","issue":"Sandbox escape via Function constructor to leak global object"},
+    {"severity":"medium","issue":"Anti-debugging detection via recursive function toString checks"},
+    {"severity":"medium","issue":"Self-modifying function pattern for string lookup table"}
+  ],
+  "dataFlow": "JSON string → parse → filter (id/name/email) → map (normalize, extract domain) → group by domain → sort groups → compute stats → output",
+  "variables": [],
+  "entryPoint": "processUserData function",
+  "functionCount": 5
+}

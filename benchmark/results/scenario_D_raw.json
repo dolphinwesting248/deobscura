@@ -1,0 +1,27 @@
+{
+  "purpose": "Obfuscated content injection script that fetches payload from remote C2 server and renders into DOM via innerHTML.",
+  "functions": [
+    {"name":"stringDecoder","purpose":"RC4-based string decryption and caching dispatcher","calls":["stringTable"],"calledBy":["all functions"]},
+    {"name":"formatDate","purpose":"URL-safe slug generator from Date objects for API query parameters","calls":["stringDecoder"],"calledBy":["apiClient"]},
+    {"name":"sanitize","purpose":"HTML entity encoder escaping < > & \" ' characters to prevent XSS","calls":["stringDecoder"],"calledBy":["renderer"]},
+    {"name":"debounce","purpose":"Debounce utility delaying wrapped function by 300ms","calls":["stringDecoder"],"calledBy":["entry"]},
+    {"name":"apiClient","purpose":"HTTP API client fetching from remote URL with date-range params","calls":["formatDate","fetch"],"calledBy":["debouncedHandler"]},
+    {"name":"renderer","purpose":"HTML template renderer building markup from API response","calls":["sanitize"],"calledBy":["responseHandler"]},
+    {"name":"antiDebug","purpose":"Self-defense anti-debugging engine: clears console, detects code beautification","calls":["stringDecoder"],"calledBy":["debounce","setInterval"]}
+  ],
+  "endpoints": [{"method":"GET","path":"(RC4-encrypted base URL)","purpose":"Fetch content from remote C2 server for DOM injection"}],
+  "security": [
+    {"severity":"high","issue":"Multi-layer obfuscation (RC4, control flow flattening, opaque predicates) conceals malicious intent"},
+    {"severity":"high","issue":"Unsanitized DOM injection via innerHTML enabling XSS"},
+    {"severity":"high","issue":"Anti-debugging self-defending: clears console every 4s, detects code beautification"},
+    {"severity":"high","issue":"Dynamic code execution via Function('return this')() bypassing CSP"},
+    {"severity":"medium","issue":"Dead code insertion inflating function bodies"}
+  ],
+  "dataFlow": "DOM click → debounce(300ms) → construct URL with slugs → fetch remote C2 → JSON parse → forEach encode name + render HTML → innerHTML inject into DOM",
+  "variables": [
+    {"name":"BASE_URL","value":"RC4-encrypted, decoded at runtime"},
+    {"name":"debouncedHandler","value":"2000ms debounced click handler"}
+  ],
+  "entryPoint": "IIFE at bottom: addEventListener on DOM element identified by encrypted selector",
+  "functionCount": 7
+}

@@ -1,0 +1,24 @@
+{
+  "purpose": "Webpack module bundle with three modules: utils (date formatting, HTML sanitization, debounce), api (polling endpoint, template rendering), and app (debounced UI event loader that fetches events and renders them into DOM).",
+  "functions": [
+    {"name":"formatDate","purpose":"Format JS Date to YYYY-MM-DD string","calls":[],"calledBy":["fetchEvents"]},
+    {"name":"sanitize","purpose":"HTML-escape special characters (<, >, &, \", ') to prevent XSS","calls":[],"calledBy":["renderEvent"]},
+    {"name":"debounce","purpose":"Debounce function with setTimeout — delays execution until pause","calls":["clearTimeout","setTimeout"],"calledBy":["app module"]},
+    {"name":"fetchEvents","purpose":"Fetch events from API for date range via GET","calls":["formatDate","fetch"],"calledBy":["app module"]},
+    {"name":"renderEvent","purpose":"Render event as HTML div with sanitized title","calls":["sanitize"],"calledBy":["app module"]}
+  ],
+  "endpoints": [{"method":"GET","path":"/events","purpose":"Fetch events for date range","queryParams":["start","end"]}],
+  "security": [
+    {"severity":"high","issue":"innerHTML usage - XSS vector if sanitize fails or is bypassed"},
+    {"severity":"high","issue":"Dynamic code execution via new Function() in string decoder"},
+    {"severity":"medium","issue":"Anti-debugging evasion - detects DevTools via function.toString() regex"},
+    {"severity":"medium","issue":"4-second setInterval polling - potential data exfiltration risk"}
+  ],
+  "dataFlow": "DOM click → debounce(300ms) → fetchEvents(start, end) → GET /events → JSON response → forEach renderEvent → sanitize title → innerHTML → DOM",
+  "variables": [
+    {"name":"BASE_URL","value":"https://api.example.com (decoded at runtime)"},
+    {"name":"debounceDelay","value":"300ms"}
+  ],
+  "entryPoint": "document.getElementById('load-btn').addEventListener('click', ...)",
+  "functionCount": 5
+}

@@ -1,0 +1,23 @@
+{
+  "purpose": "Payment processing module: Luhn card validation, card brand detection, base64 tokenization of card+CVV, and POST to external payment gateway.",
+  "functions": [
+    {"name":"processPayment","purpose":"Orchestrate card validation, tokenization, and payment API call","calls":["validateCard","encryptCardData","fetch"],"calledBy":["external"]},
+    {"name":"validateCard","purpose":"Luhn algorithm + card brand regex detection","calls":["detectCardType"],"calledBy":["processPayment"]},
+    {"name":"detectCardType","purpose":"Regex matching for Visa/MC/Amex","calls":[],"calledBy":["validateCard"]},
+    {"name":"encryptCardData","purpose":"btoa tokenization of card number and CVV","calls":["btoa"],"calledBy":["processPayment"]}
+  ],
+  "endpoints": [{"method":"POST","path":"RC4-encrypted external payment gateway","purpose":"Submit tokenized payment data (cardToken, cvvToken)"}],
+  "security": [
+    {"severity":"high","issue":"Card data tokenized with btoa (base64) only — zero cryptographic protection"},
+    {"severity":"high","issue":"Self-defending anti-tampering code hides behavior and makes PCI-DSS audit impossible"},
+    {"severity":"high","issue":"Payment data sent to RC4-encrypted hidden API endpoint — data exfiltration risk"},
+    {"severity":"medium","issue":"4-second interval anti-debugging timer (continuous CPU usage)"},
+    {"severity":"medium","issue":"CVV transmitted to external API — PCI-DSS violation"}
+  ],
+  "dataFlow": "amount + cardNumber + cvv → Luhn validation + brand detection → btoa tokenization → JSON payload → fetch POST → {success, transactionId}",
+  "variables": [
+    {"name":"CARD_PATTERNS","value":"{Visa:/^4..., Mastercard:/^5..., Amex:/^3...}"}
+  ],
+  "entryPoint": "Global scope bootstrap → self-defending → debug protection → processPayment exported",
+  "functionCount": 4
+}

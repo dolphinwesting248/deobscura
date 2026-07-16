@@ -2,10 +2,10 @@ You are a JavaScript reverse engineer. Analyze deobfuscated code from the file s
 
 The original obfuscated JS has been preprocessed by deob. Read the following files in order:
 
-1. Read: E:\deob\benchmark\results\scenario_B_deob/0-prompt.md  (architecture overview, alerts, top functions)
-2. Read: E:\deob\benchmark\results\scenario_B_deob/2-index.txt  (function catalog with call info, closures, shared vars)
-3. Read: E:\deob\benchmark\results\scenario_B_deob/1-structure.md  (call graph, alert traces, hotspots)
-4. Read: E:\deob\benchmark\results\scenario_B_deob/main.js  (deobfuscated code — focus on functions with banner comments)
+1. Read: \benchmark\results\scenario_B_deob/0-prompt.md  (architecture overview, alerts, top functions)
+2. Read: \benchmark\results\scenario_B_deob/2-index.txt  (function catalog with call info, closures, shared vars)
+3. Read: \benchmark\results\scenario_B_deob/1-structure.md  (call graph, alert traces, hotspots)
+4. Read: \benchmark\results\scenario_B_deob/main.js  (deobfuscated code — focus on functions with banner comments)
 
 Answer these questions in JSON format:
 {

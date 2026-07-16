@@ -1,0 +1,24 @@
+{
+  "purpose": "Payment processing module: Luhn card validation, card type detection (Visa/MC/Amex), base64 data sanitization, and payment gateway API integration.",
+  "functions": [
+    {"name":"validateCard","purpose":"Luhn algorithm card validation with card type detection","calls":["detectCardType"],"calledBy":["processPayment"]},
+    {"name":"detectCardType","purpose":"Regex-based card type detection for Visa, MasterCard, Amex","calls":[],"calledBy":["validateCard"]},
+    {"name":"encryptCardData","purpose":"Base64-encode and truncate card number (20 chars) and CVV (8 chars)","calls":[],"calledBy":["processPayment"]},
+    {"name":"processPayment","purpose":"Orchestrate validation, encryption, and payment gateway API call","calls":["validateCard","encryptCardData","fetch"],"calledBy":["external caller"]}
+  ],
+  "endpoints": [{"method":"POST","path":"/v1/charge","purpose":"Payment gateway charge API","host":"https://api.payment.com"}],
+  "security": [
+    {"severity":"critical","issue":"Card data encrypted with btoa (base64) — not real encryption, trivially reversible"},
+    {"severity":"high","issue":"Full card number and CVV processed in plaintext memory"},
+    {"severity":"high","issue":"Anti-debugging code with setInterval(4000) continuous self-checks"},
+    {"severity":"medium","issue":"Self-modifying code overwriting function prototypes"},
+    {"severity":"low","issue":"Only Visa/MC/Amex detected — other card types unrecognized"}
+  ],
+  "dataFlow": "cardNumber + cvv → Luhn validation → card type detection (regex) → base64 encode + truncate → JSON payload → POST /v1/charge → transaction response",
+  "variables": [
+    {"name":"PAYMENT_API","value":"https://api.payment.com"},
+    {"name":"CARD_PATTERNS","value":"Visa/MasterCard/Amex regex patterns"}
+  ],
+  "entryPoint": "Module-level IIFE → anti-tampering → bootstrap → processPayment",
+  "functionCount": 4
+}
