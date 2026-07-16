@@ -34,7 +34,7 @@ _Blue = deob, red = raw. Gap explodes from scenario D onward._
 
 **Method**: Two identical LLM agents analyze the same obfuscated code and answer 8 questions. One gets deob output (`0-prompt.md` + `2-index.txt` + `main.js`), the other gets raw obfuscated code. Both answers are scored against a ground truth written from the original source.
 
-**Scoring**: Semantic keyword overlap (not exact match). Weights: Functions 30%, Security 20%, Endpoints 15%, Purpose 10%, DataFlow 10%, Variables 10%, EntryPoint 2.5%, Token Efficiency 2.5%.
+**Scoring**: Semantic keyword overlap (not exact match). Weights: Functions 30%, Security 20%, Endpoints 15%, DataFlow 10%, Variables 10%, Purpose 5%, Time 5%, EntryPoint 2.5%, Token 2.5%.
 
 **Scenarios**: 5 custom JavaScript programs obfuscated via `javascript-obfuscator` at increasing intensity:
 
