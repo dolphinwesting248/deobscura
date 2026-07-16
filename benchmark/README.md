@@ -31,10 +31,17 @@ node experiments/<date>/tools/runner.js
 #    - Agent B reads obfuscated.js directly
 #    - Save answers to results/scenario_<X>_deob.json and **_raw.json
 
-# 6. Score results
+# 6. Embed token/time metadata into answer JSONs
+node -e "..."  # or manually add _meta: { tokens, time } to each answer JSON
+
+# 7. Run LLM scoring for qualitative dimensions
+node experiments/<date>/tools/score-llm.js     # generates prompt
+# → Send prompt to LLM (Claude/GPT) → save response as results/llm-scores.json
+
+# 8. Score results (combines LLM + rule-based)
 node experiments/<date>/tools/score.js --all
 
-# 7. Generate charts
+# 9. Generate charts
 node experiments/<date>/tools/gen-charts.js
 
 # 8. Write report at experiments/<date>/report.md
@@ -56,7 +63,8 @@ benchmark/
         obfuscate.js                   ← generate obfuscated.js from original.js
         runner.js                      ← run deob on all scenarios
         score.js                       ← compare agent answers to ground truth
-        gen-chart.js                   ← generate charts based on data
+        gen-charts.js                  ← generate SVG charts
+        score-llm.js                   ← generate LLM scoring prompt
       scenarios/                       ← experiment scenarios
         A/                             ← scenario A
           original.js                  ← original source code
@@ -68,17 +76,12 @@ benchmark/
       results/                         ← experiment output
         deob-output/                   ← deob output directories
           scenario_A/                  ← deob output for scenario A
-            main.js                    ← deobfuscated code
-            0-prompt.md                ← architecture overview for LLM
-            1-structure.md             ← call graph and hotspots
-            2-index.txt                ← function catalog
-          scenario_B/
           ...
-        scenario_A_deob.json          ← Agent A (deob) answer
-        scenario_A_raw.json           ← Agent B (raw) answer
-        scenario_B_deob.json
-        scenario_B_raw.json
+        scenario_A_deob.json          ← Agent A answer (with _meta: tokens, time)
+        scenario_A_raw.json           ← Agent B answer (with _meta: tokens, time)
         ...
+        llm-scores.json               ← LLM-judged qualitative dimension scores
+        llm-score-prompt.txt          ← generated scoring prompt
       report.md                       ← experiment report
 ```
 
@@ -214,6 +217,15 @@ Save agent answers as:
 - `results/scenario_{X}_deob.json` (Agent A)
 - `results/scenario_{X}_raw.json` (Agent B)
 
+After saving, add `_meta` with token/time data to each:
+```json
+{
+  "_meta": { "tokens": 15000, "time": 30 },
+  "purpose": "...",
+  "functions": [...]
+}
+```
+
 ## Scoring
 
 ```bash
@@ -229,19 +241,19 @@ BENCH_EXP_DIR=/path/to/experiment node tools/score.js --all
 
 ### Scoring Weights
 
-For example, 9 indexes and calculation
+For example, 9 indexes and calculation:
 
-| Dimension  | Weight | Formula                                                      |
-| ---------- | ------ | ------------------------------------------------------------ |
-| Functions  | 30%    | $F_1 = 2 \cdot \frac{P \cdot R}{P + R}$ where $P = \frac{matched}{answer}$, $R = \frac{matched}{truth}$ |
-| Security   | 20%    | $\frac{1}{n}\sum_{i=1}^n \max_{j} \; \text{overlap}(\text{answer}_j,\ \text{truth}_i)$ |
-| Endpoints  | 15%    | $\frac{\text{matched endpoints}}{\text{truth endpoints}}$    |
-| DataFlow   | 10%    | $\frac{|\text{keywords}_{\text{answer}} \cap \text{keywords}_{\text{truth}}|}{|\text{keywords}_{\text{truth}}|}$ |
-| Variables  | 10%    | $\frac{\text{matched variables}}{\text{truth variables}}$    |
-| Purpose    | 5%     | $\frac{|\text{keywords}_{\text{answer}} \cap \text{keywords}_{\text{truth}}|}{|\text{keywords}_{\text{truth}}|}$ |
-| Time       | 5%     | $1 - \frac{t_{\text{agent}}}{t_{\text{deob}} + t_{\text{raw}}}$ |
-| EntryPoint | 2.5%   | $\begin{cases}1 & \text{if identified}\\0 & \text{otherwise}\end{cases}$ |
-| Token      | 2.5%   | $1 - \frac{k_{\text{agent}}}{k_{\text{deob}} + k_{\text{raw}}}$ |
+| Dimension  | Weight | Method | Formula / Description                                        |
+| ---------- | ------ | ------ | ------------------------------------------------------------ |
+| Functions  | 30%    | LLM    | Semantic match of purpose + call relationships against ground truth |
+| Security   | 20%    | LLM    | Conceptual match: "weak hash" = "algorithm is trivially reversible" |
+| Endpoints  | 15%    | Rule   | $\frac{\text{matched endpoints}}{\text{truth endpoints}}$ (exact method + fuzzy path) |
+| DataFlow   | 10%    | LLM    | Semantic overlap of data flow description                    |
+| Variables  | 10%    | LLM    | Value/purpose matching regardless of variable naming         |
+| Purpose    | 5%     | LLM    | Semantic match of one-sentence summary                       |
+| Time       | 5%     | Rule   | $1 - \frac{t_{\text{agent}}}{t_{\text{deob}} + t_{\text{raw}}}$ |
+| EntryPoint | 2.5%   | Rule   | $\begin{cases}1 & \text{if identified}\\0 & \text{otherwise}\end{cases}$ |
+| Token      | 2.5%   | Rule   | $1 - \frac{k_{\text{agent}}}{k_{\text{deob}} + k_{\text{raw}}}$ |
 
 ## Generate the charts
 
@@ -258,8 +270,6 @@ node experiments/<date>/tools/gen-charts.js
 | `imgs/bar-token.svg` | Bar chart | Token section |
 | `imgs/pie-value.svg` | Donut chart | Aggregate Analysis |
 | `imgs/radar-A.svg` ~ `radar-E.svg` | Radar chart | Per-scenario sections |
-| ... | ... | ... |
-
 ## Writing the Report
 
 Use this framework for `report.md`. Keep each section concise — data drives the narrative.
@@ -283,7 +293,7 @@ Use this framework for `report.md`. Keep each section concise — data drives th
 For each scenario:
   ### X. Name (Difficulty)
   - One-line result: deob Nx | key finding
-  - Score table (deob vs raw per dimension)
+  - Radar chart + score table (all 9 dimensions, deob vs raw)
   - What happened (2-3 sentences)
   - Why deob helped/didn't (1-2 sentences)
 
