@@ -3,6 +3,7 @@
 ## Quick Start
 
 ```bash
+npm i deobscura -g               # global install
 deob init                        # create deob.config.js
 deob                             # auto-detect deob.config.js
 deob -c path/to/config.js        # explicit config

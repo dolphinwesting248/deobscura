@@ -8,12 +8,11 @@ Deobscura is an AST-based JavaScript deobfuscation framework, purpose-built as a
 ## Quick Start
 
 ```bash
-npm install
-npm link
+npm i deobscura -g           # global install
 deob init                    # create deob.config.js
 # edit deob.config.js — set input path and options
 deob                         # run with config
-deobscura -c other.config.js      # explicit config path
+deob -c other.config.js      # explicit config path
 ```
 
 ## Configuration
