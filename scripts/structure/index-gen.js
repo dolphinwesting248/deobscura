@@ -118,6 +118,14 @@ function generateIndex(outputDir, opts) {
   }
   const groupLabels = { core: "Core runtime", branch: "Branches", callback: "Callbacks", data: "Data tables", network: "Network", websocket: "WebSocket", crypto: "Crypto", parser: "Parser", i18n: "i18n", polyfill: "Polyfill", filesystem: "Filesystem", timer: "Timers", construct: "Constructors", delegate: "Delegates", varargs: "Varargs", boilerplate: "Webpack boilerplate", other: "Other" };
 
+  // Build parent-name lookup for single-letter function disambiguation
+  const parentOf = new Map(); // fnName → parentFnName
+  for (const f of functions) {
+    for (const c of f.calls) {
+      if (!parentOf.has(c)) parentOf.set(c, f.name);
+    }
+  }
+
   for (const [cat, fns] of Object.entries(groups)) {
     if (fns.length === 0) continue;
     lines.push(`## fn/${cat}  (${fns.length})`);
@@ -135,8 +143,10 @@ function generateIndex(outputDir, opts) {
         ...(f.suspicious || []),
       ].filter(Boolean).join(" ");
       const roles = f.paramRoles || "";
+      // Disambiguate single-letter names with parent context
+      const nameDisplay = f.name.length <= 2 && parentOf.has(f.name) ? `${f.name} (←${parentOf.get(f.name)})` : f.name;
       const extras = [roles, semTags, desc, flags].filter(Boolean).join(" ; ");
-      lines.push(`${f.name} | ${flines} | ${size} | cc=${f.complexity || 1}${calls}${calledBy}${extras ? " | " + extras : ""}`);
+      lines.push(`${nameDisplay} | ${flines} | ${size} | cc=${f.complexity || 1}${calls}${calledBy}${extras ? " | " + extras : ""}`);
     }
     lines.push("");
   }

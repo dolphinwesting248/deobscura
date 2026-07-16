@@ -924,6 +924,10 @@ function categorizeFn(name, fn, meta) {
   if (desc.includes("pass-through") || desc.includes("returns arg") || desc.includes("calls expr")) return "delegate";
   if (/arguments\[/.test((fn.suspicious || []).join(" "))) return "varargs";
   if (/\b(__esModule|Object\.defineProperty|d\s*\(\s*exports|exports\s*\[)\b/.test(src)) return "boilerplate";
+  // Callback-driven handlers (have cb= but not pure pass-through)
+  if (desc.includes("callback-driven") && !desc.includes("pass-through")) return "handler";
+  // Side-effect functions (mutate state but not callback-driven)
+  if (desc.includes("side-effects") && !desc.includes("callback-driven")) return "sideeffect";
 
   // Structural patterns — AFTER domain checks so try/catch with domain code wins
   if (name.includes(SUB_FN_PREFIX + "return_") || name.includes(SUB_FN_PREFIX + "return_L")) return "callback";

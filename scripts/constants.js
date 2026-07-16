@@ -155,7 +155,7 @@ const THRESHOLDS = {
 const CATEGORIES = [
   "data", "core", "framework", "network", "websocket", "crypto",
   "parser", "i18n", "polyfill", "filesystem", "timer", "construct",
-  "delegate", "varargs", "boilerplate", "callback", "branch", "dynamic", "other",
+  "delegate", "handler", "sideeffect", "varargs", "boilerplate", "callback", "branch", "dynamic", "other",
 ];
 
 // ---- Category Display Labels ----
@@ -173,6 +173,8 @@ const CATEGORY_LABELS = {
   timer: "Timers",
   construct: "Factories",
   delegate: "Delegates",
+  handler: "Callback Handlers",
+  sideeffect: "Side Effects",
   varargs: "Varargs",
   boilerplate: "Boilerplate",
   callback: "Callbacks",
@@ -253,6 +255,13 @@ const CATEGORY_RULES = [
   { category: "polyfill", regex: /\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__|ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor)\b/i },
   { category: "filesystem", regex: /\b(fs\.|fse\.|chmod|chown|statSync|mkdir|readFile|writeFile|copyFile|unlink|Buffer\.|glob\b|readdir|rmSync)\b/i },
   { category: "boilerplate", regex: /\b(__esModule|Object\.defineProperty|d\s*\(\s*exports|exports\s*\[)\b/ },
+];
+
+// ---- Behavioral description patterns (for categorizeFn fallback) ----
+const DESC_PATTERNS = [
+  { category: "handler", desc: "callback-driven" },
+  { category: "handler", desc: "side-effects" },
+  { category: "handler", desc: "callback-driven, side-effects" },
 ];
 
 // ---- Framework Detection Patterns (for categorizeFn, checked BEFORE CATEGORY_RULES) ----
