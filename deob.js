@@ -24,15 +24,18 @@ function collectJsFilesRecursive(dir, baseDir) {
 }
 
 function processOneFile(file, outDir, opts) {
-  console.log(`\n${"=".repeat(50)}`);
-  console.log(`Input:  ${file}`);
-  console.log(`Output: ${outDir}/`);
-  if (opts.split) console.log("        (split mode)");
-  console.log("");
+  if (!opts.quiet) {
+    console.log(`\n${"=".repeat(50)}`);
+    console.log(`Input:  ${file}`);
+    console.log(`Output: ${outDir}/`);
+    if (opts.split) console.log("        (split mode)");
+    console.log("");
+  }
 
   try {
     main({ input: file, output: outDir, split: opts.split });
   } catch (e) {
+    if (opts.fatal) { console.error(`\nERROR: ${e.message.split("\n")[0]}`); process.exit(1); }
     console.error(`  SKIPPED: ${e.message.split("\n")[0]}`);
     return [];
   }
@@ -115,18 +118,7 @@ function processSingleFile(inputPath, outputDir, opts) {
   }
   console.log("");
 
-  try {
-    main({ input: inputPath, output: outputDir, split: opts.split });
-  } catch (e) {
-    console.error(`\nERROR: ${e.message.split("\n")[0]}`);
-    process.exit(1);
-  }
-
-  if (opts.tier && opts.tier < 3) applyTierFilter(outputDir, opts.tier, opts.fold);
-
-  if (opts.metrics) runMetrics(inputPath, outputDir);
-  if (opts.md) { runStructure(inputPath, outputDir, { denoise: opts.denoise }); generatePromptFile(outputDir); }
-  if (opts.index) generateIndex(outputDir, { denoise: opts.denoise });
+  return processOneFile(inputPath, outputDir, { ...opts, quiet: true, fatal: true });
 }
 
 function defaultOutDir(inputPath) {
