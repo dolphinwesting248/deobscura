@@ -1,0 +1,22 @@
+{
+  "A": {
+    "deob": {"Purpose":0.85,"Functions":1.0,"Security":0.67,"DataFlow":0.9,"Variables":1.0},
+    "raw": {"Purpose":0.8,"Functions":0.95,"Security":0.67,"DataFlow":0.8,"Variables":1.0}
+  },
+  "B": {
+    "deob": {"Purpose":0.9,"Functions":1.0,"Security":0.67,"DataFlow":0.75,"Variables":1.0},
+    "raw": {"Purpose":0.85,"Functions":0.75,"Security":0.33,"DataFlow":0.7,"Variables":1.0}
+  },
+  "C": {
+    "deob": {"Purpose":0.95,"Functions":1.0,"Security":0.0,"DataFlow":0.95,"Variables":1.0},
+    "raw": {"Purpose":1.0,"Functions":1.0,"Security":1.0,"DataFlow":1.0,"Variables":1.0}
+  },
+  "D": {
+    "deob": {"Purpose":0.9,"Functions":1.0,"Security":0.5,"DataFlow":0.9,"Variables":1.0},
+    "raw": {"Purpose":0.45,"Functions":0.7,"Security":0.5,"DataFlow":0.7,"Variables":0.0}
+  },
+  "E": {
+    "deob": {"Purpose":0.9,"Functions":1.0,"Security":0.5,"DataFlow":0.85,"Variables":1.0},
+    "raw": {"Purpose":0.9,"Functions":1.0,"Security":0.35,"DataFlow":0.9,"Variables":0.5}
+  }
+}

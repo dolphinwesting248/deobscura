@@ -122,18 +122,19 @@ function scoreToken(agentTokens, deobTokens, rawTokens) {
   return 1 - (agentTokens / total);
 }
 
-function computeScores(answer, truth, meta, agentType) {
+function computeScores(answer, truth, meta, agentType, llmScores) {
   const isDeob = agentType === "deob";
   const deobT = meta.deobTime || 0, rawT = meta.rawTime || 0;
   const deobK = meta.deobTokens || 0, rawK = meta.rawTokens || 0;
 
+  // Use LLM scores for qualitative dimensions, fall back to keyword-based
   const scores = {
-    purpose: scorePurpose(answer, truth),
-    functions: scoreFunctions(answer, truth),
+    purpose:   llmScores ? (llmScores.Purpose || scorePurpose(answer, truth)) : scorePurpose(answer, truth),
+    functions: llmScores ? (llmScores.Functions || scoreFunctions(answer, truth)) : scoreFunctions(answer, truth),
     endpoints: scoreEndpoints(answer, truth),
-    security: scoreSecurity(answer, truth),
-    dataFlow: scoreDataFlow(answer, truth),
-    variables: scoreVariables(answer, truth),
+    security:  llmScores ? (llmScores.Security || scoreSecurity(answer, truth)) : scoreSecurity(answer, truth),
+    dataFlow:  llmScores ? (llmScores.DataFlow || scoreDataFlow(answer, truth)) : scoreDataFlow(answer, truth),
+    variables: llmScores ? (llmScores.Variables || scoreVariables(answer, truth)) : scoreVariables(answer, truth),
     entry: scoreEntry(answer, truth),
     time: scoreTime(isDeob ? deobT : rawT, deobT, rawT),
     token: scoreToken(isDeob ? deobK : rawK, deobK, rawK),
@@ -159,6 +160,14 @@ function scoreScenario(scenario, expDir) {
   const deobAnswer = loadAnswer(deobPath);
   const rawAnswer = loadAnswer(rawPath);
 
+  // Load LLM-judged scores (qualitative dimensions)
+  const llmScoresPath = path.join(resultsDir, "llm-scores.json");
+  let llmData = null;
+  if (fs.existsSync(llmScoresPath)) {
+    const allLlm = JSON.parse(fs.readFileSync(llmScoresPath, "utf-8"));
+    if (allLlm[scenario]) llmData = allLlm[scenario];
+  }
+
   // Read token/time from _meta embedded in answer JSONs
   const deobMeta = deobAnswer._meta || {};
   const rawMeta = rawAnswer._meta || {};
@@ -172,8 +181,8 @@ function scoreScenario(scenario, expDir) {
 
   return {
     scenario,
-    deob: computeScores(deobAnswer, gt, meta, "deob"),
-    raw: computeScores(rawAnswer, gt, meta, "raw"),
+    deob: computeScores(deobAnswer, gt, meta, "deob", llmData ? llmData.deob : null),
+    raw: computeScores(rawAnswer, gt, meta, "raw", llmData ? llmData.raw : null),
     tokens: meta,
   };
 }
