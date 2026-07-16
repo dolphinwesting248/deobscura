@@ -171,6 +171,22 @@ function simplify(ast) {
       return t.stringLiteral(node.callee.object.elements.map((e) => e.value).join(sep));
     }
 
+    // --- hex/unicode string normalization: extra.raw still has \x escapes after Babel decoding ---
+    if (t.isStringLiteral(node) && node.extra && node.extra.raw && /\\x[0-9a-f]{2}|\\u[0-9a-f]{4}/i.test(node.extra.raw)) {
+      strCount++;
+      node.extra = { rawValue: node.value, raw: JSON.stringify(node.value) };
+    }
+
+    // --- hex numeric normalization: 0xa4 → 164 (only for small values used as indices/char codes) ---
+    if (t.isNumericLiteral(node) && node.extra && node.extra.rawValue && /^0x[0-9a-f]+$/i.test(node.extra.rawValue)) {
+      const val = node.value;
+      // Only normalize small hex values that are likely indices/char codes, not memory addresses
+      if (val < 65536) {
+        normCount++;
+        node.extra = { rawValue: val, raw: String(val) };
+      }
+    }
+
     // --- normalize (AST-level): ~arr.indexOf→arr.includes, ~~x→Math.trunc, +x→Number ---
     if (t.isUnaryExpression(node) && node.operator === "~" &&
         t.isCallExpression(node.argument) && t.isMemberExpression(node.argument.callee) &&
