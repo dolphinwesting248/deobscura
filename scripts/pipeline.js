@@ -171,6 +171,9 @@ function writeSingleOutput(ast, output, code) {
   if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true });
   fs.mkdirSync(outDir, { recursive: true });
 
+  // Safety: filter out any non-statement nodes from program body
+  ast.program.body = ast.program.body.filter((n) => n && typeof n.type === "string" && n.type !== "CommentLine" && n.type !== "CommentBlock");
+
   console.log("Generating output...");
   const g0 = Date.now();
   const generated = generate(ast, {
