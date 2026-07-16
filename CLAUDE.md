@@ -213,7 +213,7 @@ input.js
 **Does not**: Modify AST, know about extraction or naming
 
 ### naming.js — Sub-function Naming
-**Does**: subName (with collision detection), getFnName, cleanName, resetNames
+**Does**: safeName (normalize arbitrary names into valid JS identifiers), subName (with collision detection), getFnName, cleanName, resetNames
 **Does not**: Create AST nodes, walk AST
 
 ### emit.js — AST Node Creation
@@ -258,11 +258,11 @@ input.js
 **Does not**: Generate output files, modify AST
 
 ### structure/report.js — Report Generation
-**Does**: generateMarkdown, generatePromptFile, generateReadingGuide, runStructure
+**Does**: generateMarkdown (with banner embedding), generatePromptFile (closure captures + shared variables), generateReadingGuide, runStructure
 **Does not**: Analyze AST, classify functions
 
 ### structure/index-gen.js — Index Generation
-**Does**: generateIndex (compact text-based function catalog)
+**Does**: generateIndex (compact function catalog with legend, categories, closure captures, shared variables section)
 **Does not**: Generate Markdown, analyze AST independently
 
 ### structure/tier.js — Tier Filtering
@@ -444,13 +444,15 @@ Functions are categorized by `categorizeFn` in structure/analyze.js, using `CATE
 | `delegate` | Behavioral desc | pass-through/returns arg |
 | `callback` | Name pattern | `_S_return_*` |
 | `branch` | Name pattern | `_S_*_if/_else/_try/_catch` |
+| `handler` | Event/Promise patterns | Event listeners, message callbacks |
+| `obfuscation` | Obfuscation tool patterns | selfDefending, debugProtection, Function('return this') |
 | `other` | Fallback | Uncategorized |
 
 ## Domain Classification
 
-`classifyDomain` in structure/analyze.js uses `DOMAIN_RULES` from constants.js. Each rule is `{ tag, regex, exclusive?, extra?, exclude?, minCount? }`.
+`classifyDomain` in structure/analyze.js uses `DOMAIN_RULES` from constants.js. Each rule is `{ tag, regex, exclusive?, extra?, exclude?, minCount?, framework? }`.
 
-Simple rules are applied via a loop. Compound rules (Network, API Router, Eval-heavy) have special logic.
+Rules are scored by match count. **Framework rules** (Vue, React, etc.) get 3x weight and always appear first. **Exclusive rules** (webpack bundle) get 2x weight. Top 3 domains are shown.
 
 ### Adding a New Domain Rule
 

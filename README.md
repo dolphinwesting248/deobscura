@@ -57,12 +57,44 @@ All output goes into a directory. Files are numbered to guide LLM agents through
 output.deob/
 ├── 0-prompt.md       ← LLM analysis entry (architecture, alerts, top 5, reading path)
 ├── 1-structure.md    ← call graph, hotspots, alert traces, naming convention
-├── 2-index.txt       ← function catalog with line numbers for jump-reading
-├── main.js           ← deobfuscated code — jump-read only, do not read first
-└── metrics.html      ← readability report (metrics: true)
+├── 2-index.txt       ← function catalog with legend and categories
+├── main.js           ← deobfuscated code with metadata banners on _S_ functions
+└── summary.md        ← (directory mode) cross-file legend and keyword index
 ```
 
-**Directory input** recursively processes nested subdirectories. A top-level `0-prompt.md` provides the cross-file entry point. `summary.md` aggregates cross-file analysis.
+**Directory input** recursively processes nested subdirectories. A top-level `0-prompt.md` provides the cross-file entry point. Legend and naming convention are centralized in `summary.md`.
+
+## Metadata Banners
+
+Each `_S_` function in `main.js` has a structured comment showing its shape and role:
+
+```javascript
+// _S_fetch_01_try | 1S/2P | cc=1 | ⇐ main | → fetch | closure: cfg | [URL]
+function _S_fetch_01_try(url, cfg) { ... }
+```
+
+| Field | Meaning |
+|-------|---------|
+| `1S/2P` | 1 statement, 2 parameters |
+| `cc=1` | Cyclomatic complexity (branch density) |
+| `⇐ main` | Called by `main` |
+| `→ fetch` | Calls `fetch` |
+| `closure: cfg` | Captures variable `cfg` from outer scope |
+| `[URL]` | Security alert detected |
+
+## Shared Variables & Closures
+
+`0-prompt.md` and `2-index.txt` include closure capture and shared variable analysis:
+
+```
+## Architecture
+- Closure captures: 65 variables captured by 15 functions
+- Shared variables: cfg (5 functions), token (3 functions)
+
+## shared (in 2-index.txt)
+token ⇒ login, getUserProfile (const, mutated)
+cfg ⇒ _S_fn1, _S_fn2, main (const, not mutated)
+```
 
 ## Agent-Oriented Navigation
 
@@ -101,7 +133,7 @@ Output files are designed for LLM agents (Claude Code, Codex, etc.) to discover 
 | 15 | `inlineSingleCallerFns` | Inline functions called from exactly one place |
 | 16 | `normalizeSyntax` | `~arr.indexOf` → `arr.includes`, `~~x` → `Math.trunc` |
 | 17 | `extractInlineFunctions` | Re-extract exposed inline functions |
-| 18 | `annotateAlerts` | Inject `[Label]` comments for security-relevant patterns |
+| 18 | `annotateAlerts` | Inject alerts + metadata banners on `_S_` functions (name, S/P, cc, callers, callees, closures) |
 | 19 | `sanitizeReservedWords` | Re-sanitize (pipeline may introduce new reserved words) |
 | 20 | `pushDataToBottom` | Move DATA-heavy functions to end with separator |
 
@@ -130,6 +162,10 @@ Functions are automatically categorized:
 | `polyfill` | core-js/ToPrimitive patterns | ES polyfills |
 | `callback` | `_S_return_*` names | Extracted callbacks |
 | `branch` | `_S_*_if/_try/_catch` | Extracted branches |
+| `handler` | Event listener/Promise patterns | Event/message handlers |
+| `obfuscation` | `Function('return this')`, selfDefending, debugProtection patterns | Obfuscation tooling artifacts |
+| `construct` | Constructor/factory patterns | Object factories |
+| `delegate` | Pass-through/forward patterns | Delegation wrappers |
 | `other` | None of the above | Uncategorized |
 
 ## Naming Convention
@@ -239,6 +275,18 @@ scripts/
   metrics.js          ← Before/after readability metrics, HTML report
   index.js            ← Public API re-export
 ```
+
+## Domain Classification
+
+Deob auto-detects the code's domain (Vue, React, webpack, Crypto, Network, etc.) via weighted scoring. Framework patterns get higher priority. Top 3 domains shown.
+
+## Benchmark
+
+[Sub-agent benchmark](./benchmark/)量化 deob 对 LLM 逆向分析的提升。
+- 5 个场景，从 Easy (base64 strings) 到 Hard (RC4 + flattening + deadCode + selfDefending)
+- deob 平均提升 **1.6x**，Hard 场景提升 **3-5x**
+- 端点检测：deob 100% vs raw 27%
+- See [benchmark/report.md](./benchmark/experiments/2026-07-17-v1/report.md) for full results
 
 ## API
 
