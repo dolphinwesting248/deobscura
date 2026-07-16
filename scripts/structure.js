@@ -408,6 +408,18 @@ function analyzeStructure(filepath, opts) {
       }
       // Don't recurse into nested functions (each is its own analysis unit)
       if (t.isFunction(node)) return;
+      // AST-based alert detection
+      if (node.type === "DebuggerStatement") {
+        alerts.push({ fn: fnName, line: node.loc ? node.loc.start.line : 0, label: "Anti-Tamper", severity: "high", matches: ["debugger"] });
+      }
+      if (t.isCallExpression(node) || t.isNewExpression(node)) {
+        if (t.isIdentifier(node.callee, { name: "eval" })) {
+          alerts.push({ fn: fnName, line: node.loc ? node.loc.start.line : 0, label: "Eval/Dynamic", severity: "critical", matches: ["eval()"] });
+        }
+        if (t.isIdentifier(node.callee, { name: "Function" })) {
+          alerts.push({ fn: fnName, line: node.loc ? node.loc.start.line : 0, label: "Eval/Dynamic", severity: "critical", matches: ["new Function()"] });
+        }
+      }
       for (const k of Object.keys(node)) {
         if (k === "start" || k === "end" || k === "loc" ||
             k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;

@@ -1343,6 +1343,36 @@ function annotateAlerts(ast) {
         }
       }
       collectStrings(node.body);
+      // AST-based alert detection (not string-based)
+      function scanAST(n) {
+        if (!n || typeof n !== "object") return;
+        // debugger statement
+        if (n.type === "DebuggerStatement") {
+          const existing = matches.find((a) => a.label === "Anti-Tamper");
+          if (existing) { if (!existing.matches.includes("debugger")) existing.matches.push("debugger"); }
+          else matches.push({ label: "Anti-Tamper", matches: ["debugger"] });
+        }
+        // new Function() or eval()
+        if (t.isCallExpression(n) || t.isNewExpression(n)) {
+          if (t.isIdentifier(n.callee, { name: "eval" })) {
+            const existing = matches.find((a) => a.label === "Eval/Dynamic");
+            if (existing) { if (!existing.matches.includes("eval()")) existing.matches.push("eval()"); }
+            else matches.push({ label: "Eval/Dynamic", matches: ["eval()"] });
+          }
+          if (t.isIdentifier(n.callee, { name: "Function" })) {
+            const existing = matches.find((a) => a.label === "Eval/Dynamic");
+            if (existing) { if (!existing.matches.includes("new Function()")) existing.matches.push("new Function()"); }
+            else matches.push({ label: "Eval/Dynamic", matches: ["new Function()"] });
+          }
+        }
+        for (const k of Object.keys(n)) {
+          if (k === "start" || k === "end" || k === "loc") continue;
+          const v = n[k];
+          if (Array.isArray(v)) { for (const x of v) scanAST(x); }
+          else if (v && typeof v.type === "string") scanAST(v);
+        }
+      }
+      scanAST(node.body);
       if (matches.length > 0) {
         if (!node.leadingComments) node.leadingComments = [];
         const parts = matches.map((a) => `[${a.label}] ${a.matches.join(" · ")}`);

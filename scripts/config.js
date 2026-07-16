@@ -41,6 +41,7 @@ const ALERT_PATTERNS = [
   { label: "Prototype Pollute", regex: /\b(?:__proto__|constructor\s*\[|prototype\s*\[|constructor\.prototype)\b/gi, severity: "high" },
   { label: "Fingerprint", regex: /\b(?:toDataURL|getParameter|WEBGL_debug_renderer_info|canvas.*hash|fingerprint|fp_risk|buvid_fp)\b/gi, severity: "high" },
   { label: "Cookie", regex: /\b(?:document\.cookie|\.cookie\b.*=|cookieEnabled|setCookie|getCookie)\b/gi, severity: "medium" },
+  { label: "Anti-Tamper", regex: /\bdebugger\b/gi, severity: "high" },
 ];
 
 module.exports = { parser, generate, t, fs, path, GLOBALS, ALERT_PATTERNS };
