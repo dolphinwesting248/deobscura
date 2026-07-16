@@ -34,7 +34,16 @@ _Blue = deob, red = raw. Gap explodes from scenario D onward._
 
 **Method**: Two identical LLM agents analyze the same obfuscated code and answer 8 questions. One gets deob output (`0-prompt.md` + `2-index.txt` + `main.js`), the other gets raw obfuscated code. Both answers are scored against a ground truth written from the original source.
 
-**Scoring**: Semantic keyword overlap (not exact match). Weights: Functions 30%, Security 20%, Endpoints 15%, DataFlow 10%, Variables 10%, Purpose 5%, Time 5%, EntryPoint 2.5%, Token 2.5%.
+**Scoring**: Semantic keyword overlap (not exact match).
+- **Functions** (30%): F1 score — purpose text similarity between agent answer and ground truth
+- **Security** (20%): Issue keyword overlap — how many ground truth security issues the agent identified
+- **Endpoints** (15%): Exact method match + path fuzzy match against ground truth
+- **DataFlow** (10%): Keyword overlap between agent's data flow description and ground truth
+- **Variables** (10%): Value/purpose matching for key constants and config values
+- **Purpose** (5%): Keyword overlap between agent's one-sentence summary and ground truth description
+- **Time** (5%): raw_time / deob_time, capped at 5x speedup = max score (deob is faster → higher score)
+- **EntryPoint** (2.5%): Binary — did the agent identify a non-trivial entry point?
+- **Token** (2.5%): raw_tokens / deob_tokens, capped at 10x ratio = max score (deob uses fewer tokens → higher score)
 
 **Scenarios**: 5 custom JavaScript programs obfuscated via `javascript-obfuscator` at increasing intensity:
 
@@ -56,6 +65,11 @@ deob **1.2x** | 3 API endpoints vs raw's 1 | 1.3x fewer tokens
 
 ![](imgs/radar-A.svg)
 
+| Agent | Purpose | Functions | Endpoints | Security | DataFlow | Vars | Time | Entry | Token | **Total** |
+|-------|---------|-----------|-----------|----------|----------|------|------|-------|-------|-----------|
+| deob | 0.17 | 0.38 | 1.00 | 0.31 | 0.60 | 1.00 | 0.53 | 1.00 | 0.13 | **0.55** |
+| raw  | 0.58 | 0.46 | 0.33 | 0.17 | 0.50 | 1.00 | 0.53 | 1.00 | 0.13 | **0.46** |
+
 **What happened**: Both agents identified the login and profile functions. Deob correctly found all 3 API endpoints (`POST /auth/login`, `GET /users/:id`, `PUT /users/:id`) while raw only found 1. The gap is small because simple renameGlobals + base64 string obfuscation doesn't block raw analysis much.
 
 **Why deob helped**: String decoding revealed the endpoint paths hidden in the obfuscated string array.
@@ -65,6 +79,11 @@ deob **1.2x** | 3 API endpoints vs raw's 1 | 1.3x fewer tokens
 deob **1.3x** | Functions 2.5x better | deob output exceeds raw input
 
 ![](imgs/radar-B.svg)
+
+| Agent | Purpose | Functions | Endpoints | Security | DataFlow | Vars | Time | Entry | Token | **Total** |
+|-------|---------|-----------|-----------|----------|----------|------|------|-------|-------|-----------|
+| deob | 0.56 | 0.39 | 1.00 | 0.00 | 0.52 | 0.00 | 0.34 | 1.00 | 0.08 | **0.39** |
+| raw  | 0.44 | 0.16 | 1.00 | 0.00 | 0.39 | 0.00 | 0.34 | 1.00 | 0.08 | **0.30** |
 
 **What happened**: The control-flow flattened `authenticate()` function was split into 20 `_S_` sub-functions by deob. Deob correctly identified `hashPassword`, `generateToken`, `getStoredHash`, etc. Raw struggled with the while+switch dispatcher — it could only trace 3-4 functions through the spaghetti.
 
@@ -78,15 +97,25 @@ deob **1.1x** — smallest gap | deob output exceeds raw input
 
 ![](imgs/radar-C.svg)
 
+| Agent | Purpose | Functions | Endpoints | Security | DataFlow | Vars | Time | Entry | Token | **Total** |
+|-------|---------|-----------|-----------|----------|----------|------|------|-------|-------|-----------|
+| deob | 0.60 | 0.78 | 1.00 | 1.00 | 0.45 | 1.00 | 0.46 | 1.00 | 0.06 | **0.81** |
+| raw  | 0.60 | 0.62 | 1.00 | 1.00 | 0.48 | 1.00 | 0.46 | 1.00 | 0.06 | **0.76** |
+
 **What happened**: This was the anomaly — both agents performed well. The data pipeline has no security-sensitive code (no API calls, no credentials). The task was purely structural: identify the filter→map→group→sort→stats pipeline. Raw could trace this through the obfuscation because the flow is linear.
 
 **However**: Deob extracted 17 sub-functions (some are `debugProtection` wrappers), which distracted the agent slightly. The extra anti-debugging code inflated the function count without adding useful analysis. This is a deob output quality issue — the `obfuscation` category label we just added should help future agents filter these.
 
 ### D. Webpack Module Bundle (Hard)
 
-deob **5.1x** — largest gap | 1.5x fewer input tokens
+deob **4.1x** — largest gap | 1.5x fewer input tokens
 
 ![](imgs/radar-D.svg)
+
+| Agent | Purpose | Functions | Endpoints | Security | DataFlow | Vars | Time | Entry | Token | **Total** |
+|-------|---------|-----------|-----------|----------|----------|------|------|-------|-------|-----------|
+| deob | 0.88 | 0.82 | 1.00 | 0.38 | 0.58 | 1.00 | 0.70 | 1.00 | 0.15 | **0.74** |
+| raw  | 0.00 | 0.17 | 0.00 | 0.16 | 0.34 | 0.00 | 0.70 | 1.00 | 0.15 | **0.18** |
 
 **What happened**: Raw agent nearly completely failed. The 42KB webpack bundle with all obfuscation techniques (RC4 strings, flattening, selfDefending, unicodeEscape) was impenetrable. Raw took 400 seconds and still couldn't identify any endpoints or meaningful functions.
 
@@ -96,9 +125,14 @@ Deob extracted 30 sub-functions, decoded 887 string constants, and correctly ide
 
 ### E. Payment Processing (Hard)
 
-deob **2.3x** | Endpoint raw 0 vs deob 1 | 1.2x fewer input tokens
+deob **2.4x** | Endpoint raw 0 vs deob 1 | 1.2x fewer input tokens
 
 ![](imgs/radar-E.svg)
+
+| Agent | Purpose | Functions | Endpoints | Security | DataFlow | Vars | Time | Entry | Token | **Total** |
+|-------|---------|-----------|-----------|----------|----------|------|------|-------|-------|-----------|
+| deob | 0.85 | 0.37 | 1.00 | 0.40 | 0.58 | 1.00 | 0.27 | 1.00 | 0.12 | **0.58** |
+| raw  | 0.62 | 0.29 | 0.00 | 0.18 | 0.50 | 0.00 | 0.27 | 1.00 | 0.12 | **0.25** |
 
 **What happened**: The 63KB payment module with max-settings obfuscation was the largest file. Deob extracted 44 sub-functions and decoded 1,622 strings. Raw spent 255 seconds and couldn't find the payment API endpoint or identify the Luhn algorithm.
 
@@ -188,7 +222,6 @@ Deob correctly identified `validateCard` (Luhn algorithm), `detectCardType` (Vis
 | Custom-written code | Perfect ground truth vs real-world ambiguity |
 | Scoring function | Security undercounts when wording differs from ground truth |
 | Agent prompts | Prompt engineering not optimized; results could shift with better prompts |
-| Token costs | Not measured; would add cost-efficiency dimension |
 | Scenario C anomaly | Anti-debug noise inflated deob's function count, hurting score |
 
 ---
