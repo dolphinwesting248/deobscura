@@ -202,8 +202,13 @@ function generatePromptFile(outputDir) {
 
   const zeroFnWarning = summary.totalFunctions === 0 ? `\n> **WARNING**: 0 functions extracted. This file may be data-only, heavily obfuscated (control-flow flattening / VM-based), or non-JS content. The analysis below is empty — consider manual inspection.\n` : "";
 
+  // Webpack chunk detection
+  const domainStr = domain || "";
+  const isWebpackChunk = /webpack|rspack|turbopack/i.test(domainStr);
+  const chunkWarning = isWebpackChunk ? `\n> **NOTE**: This is a webpack/rspack chunk — it likely contains only a subset of the application logic. Other chunks may contain the actual business logic, API calls, and security-relevant code. Check for additional chunk files (e.g., \`0.risk-captcha.js\`, \`vendor.js\`).\n` : "";
+
   const content = `You are analyzing deobfuscated JavaScript from \`${file}\`. The preprocessor already determined:
-${zeroFnWarning}
+${zeroFnWarning}${chunkWarning}
 ## Architecture
 - ${summary.totalFunctions} functions (${summary.originalFunctions} original, ${summary.subFunctions} extracted)
 - Domain: **${domain}**
