@@ -141,8 +141,9 @@ function generateIndex(outputDir, opts) {
     for (const f of meaningful) {
       const meta = fnMeta.get(f.name) || { totalLines: 0, stmts: f.bodyLen, heavyHex: false };
       const size = `${meta.stmts}S/${f.params}P`;
-      const calls = f.calls.length > 0 ? " → " + f.calls.join(", ") : "";
-      const calledBy = f.calledBy.length > 0 ? " ⇐ " + f.calledBy.slice(0, 5).join(", ") + (f.calledBy.length > 5 ? " +" + (f.calledBy.length - 5) : "") : f.calls.length > 0 ? " root" : "";
+      const callees = f.calls.length > 0 ? " → " + f.calls.join(", ") : "";
+      const callers = f.calledBy.length > 0 ? " ⇐ " + f.calledBy.slice(0, 5).join(", ") + (f.calledBy.length > 5 ? " +" + (f.calledBy.length - 5) : "") : callees ? " root" : "";
+      const edges = callees + callers;
       const semTags = (f.semanticTags || []).join(" ");
       const desc = f.description || "";
       const flags = [
@@ -154,7 +155,7 @@ function generateIndex(outputDir, opts) {
       // Disambiguate single-letter names with parent context
       const nameDisplay = f.name.length <= 2 && parentOf.has(f.name) ? `${f.name} (←${parentOf.get(f.name)})` : f.name;
       const extras = [roles, semTags, desc, flags].filter(Boolean).join(" ; ");
-      lines.push(`${nameDisplay} | ${size} | cc=${f.complexity || 1}${calls}${calledBy}${extras ? " | " + extras : ""}`);
+      lines.push(`${nameDisplay} | ${size} | cc=${f.complexity || 1}${edges ? " |" + edges : ""}${extras ? " | " + extras : ""}`);
     }
     if (stubs.length >= 3) {
       const ccRange = stubs.map(f => f.complexity || 1).sort((a, b) => a - b);
