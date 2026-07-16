@@ -113,14 +113,14 @@ ${hotspots.mostCalled.map((f, i) => `| ${i + 1} | Most-called | \`${f.name}\` �
 ` : ""}${hotspots.roots.length > 0 ? `| — | Roots (${hotspots.roots.length}) | Entry points: ${hotspots.roots.slice(0, 8).map((f) => `\`${f.name}\``).join(", ")}${hotspots.roots.length > 8 ? " …" : ""} |\n` : ""}${hotspots.leaves.length > 0 ? `| — | Leaves (${hotspots.leaves.length}) | Terminal functions: ${hotspots.leaves.slice(0, 8).map((f) => `\`${f.name}\``).join(", ")}${hotspots.leaves.length > 8 ? " …" : ""} |\n` : ""}${hotspots.mostCalled.length === 0 && hotspots.roots.length === 0 && hotspots.leaves.length === 0 ? "_No cross-function calls detected._\n" : ""}
 ## String Alerts
 
-${alerts.length === 0 ? "_No significant patterns detected._\n" : (() => { const deduped = []; const seen = new Map(); for (const a of alerts) { const key = a.label + "|" + (a.matches||[])[0]; if (seen.has(key)) { const prev = deduped[seen.get(key)]; if (!prev._dupes) prev._dupes = []; prev._dupes.push(a.fn + " L" + a.line); continue; } seen.set(key, deduped.length); deduped.push({...a}); } return `| Severity | Pattern | Function | Line | Trace | Matches |
-|----------|---------|----------|------|-------|---------|
+${alerts.length === 0 ? "_No significant patterns detected._\n" : (() => { const deduped = []; const seen = new Map(); for (const a of alerts) { const key = a.label + "|" + (a.matches||[])[0]; if (seen.has(key)) { const prev = deduped[seen.get(key)]; if (!prev._dupes) prev._dupes = []; prev._dupes.push(a.fn); continue; } seen.set(key, deduped.length); deduped.push({...a}); } return `| Severity | Pattern | Function | Trace | Matches |
+|----------|---------|----------|-------|---------|
 ${deduped.map((a) => {
     const tr = (report.alertTraces || []).find((t) => t.fn === a.fn);
     const afn = functions.find((f) => f.name === a.fn);
     const traceStr = tr ? tr.path.join(" → ") : (afn && afn.calledBy.length === 0) ? "no callers" : "no path";
     const dupes = a._dupes ? " (+ " + a._dupes.length + " dupes)" : "";
-    return `| ${a.severity} | ${a.label} | \`${a.fn}\` | ${a.line} | ${traceStr} | ${a.matches.join(" · ")}${dupes} |`;
+    return `| ${a.severity} | ${a.label} | \`${a.fn}\` | ${traceStr} | ${a.matches.join(" · ")}${dupes} |`;
   }).join("\n")}
 `})()}
 ## Hot Groups
@@ -229,14 +229,14 @@ ${zeroFnWarning}${chunkWarning}${purposeLine ? `\n> **Context**: ${purposeLine}\
 - Domain: **${domain}**
 - ${summary.flattened} flattened, ${summary.suspicious} suspicious patterns, max complexity ${summary.maxComplexity}
 - Code density: ${computeDensity(functions, file)}
-${decoder ? `- **String decoder**: \`${decoder.name}\` (L${decoder.lines[0]}) — self-modifying lookup, called by ${decoder.calledBy.length} functions. Strings are NOT yet decoded — you will see opaque calls like \`_0x13f90f(0x1818)\`.` : ""}
-${roots.length > 0 ? `- **Entry point**: \`${roots[0].name}\` (L${roots[0].lines[0]}) → ${roots[0].calls.slice(0,5).join(", ")}${roots[0].calls.length > 5 ? " +" + (roots[0].calls.length - 5) : ""}` : ""}
+${decoder ? `- **String decoder**: \`${decoder.name}\` — self-modifying lookup, called by ${decoder.calledBy.length} functions. Strings are NOT yet decoded — you will see opaque calls like \`_0x13f90f(0x1818)\`.` : ""}
+${roots.length > 0 ? `- **Entry point**: \`${roots[0].name}\` → ${roots[0].calls.slice(0,5).join(", ")}${roots[0].calls.length > 5 ? " +" + (roots[0].calls.length - 5) : ""}` : ""}
 
 ## Alerts (${alerts.filter(a => a.severity !== "info" && a.severity !== "low").length} significant)
 ${alerts.filter(a => a.severity !== "info" && a.severity !== "low").slice(0, 10).map((a) => {
     const countStr = a.count > 1 ? ` (×${a.count})` : "";
     const fnStr = a.count > 1 && a.fns ? a.fns.slice(0, 3).join(", ") : `\`${a.fn}\``;
-    return `- [${a.severity}] **${a.label}**${countStr} in ${fnStr} L${a.line}: ${(a.matches || []).slice(0, 3).join(", ")}`;
+    return `- [${a.severity}] **${a.label}**${countStr} in ${fnStr}: ${(a.matches || []).slice(0, 3).join(", ")}`;
   }).join("\n") || "_No significant security alerts detected._"}
 ${alerts.filter(a => a.severity === "info" || a.severity === "low").length > 0 ? `\n_${alerts.filter(a => a.severity === "info" || a.severity === "low").length} low/info alerts omitted (denoised)._` : ""}
 
@@ -248,7 +248,7 @@ ${scored.map((f, i) => {
     if ((f.suspicious || []).length > 0) why.push("suspicious");
     if (f.complexity > 5) why.push("cc=" + f.complexity);
     const tags = f.semanticTags || [];
-    return `${i + 1}. \`${f.name}\` (L${f.lines[0]}-${f.lines[1]}) [${why.join(", ") || "core"}] — ${(f.description || "").replace(/[[\]]/g, "")}${tags.length > 0 ? " [" + tags.join(", ") + "]" : ""}`;
+    return `${i + 1}. \`${f.name}\` [${why.join(", ") || "core"}] — ${(f.description || "").replace(/[[\]]/g, "")}${tags.length > 0 ? " [" + tags.join(", ") + "]" : ""}`;
   }).join("\n")}
 
 ## Skip
