@@ -75,7 +75,7 @@ The `main.js` file has no numeric prefix, signaling it should not be read first.
 | String Alerts | Security-relevant patterns with severity, function, line number, and entry→alert trace |
 | Hot Groups | Groups with most cross-function call edges |
 | Call Graph | Mermaid diagram of cross-function calls (suppressed when no edges exist) |
-| Naming Convention | Reference for `_sub_<parent>_<seq>_<description>` format and hint suffixes |
+| Naming Convention | Reference for `_S_<parent>_<seq>_<hint>` format and hint suffixes |
 
 ## Compact Index (`3-index.txt`)
 
@@ -144,16 +144,16 @@ function a0_0x5465(_0x147aca,_0x1c469e){var _0x477d9d=a0_0x1cb6();return (a0_0x5
 // Output
 function a0_0x5465(_0x147aca, _0x1c469e) {
   var _0x477d9d = a0_0x1cb6();
-  a0_0x5465 = _sub_return_fn1;
+  a0_0x5465 = _S_return_1_fn;
   return a0_0x5465(_0x147aca, _0x1c469e);
 }
-function _sub_return_fn1(_0x593f2d, _0x4d5e1e, _0x477d9d, _0x147aca) {
+function _S_return_1_fn(_0x593f2d, _0x4d5e1e, _0x477d9d, _0x147aca) {
   var _0x2a8c = _0x477d9d[_0x593f2d];
   return _0x2a8c ? _0x2a8c(_0x4d5e1e, _0x147aca) : _0x4d5e1e;
 }
 ```
 
-↑ `return (a=fn, b)` → two statements; inline `function` lifted to `_sub_return_fn1` with external refs as params.
+↑ `return (a=fn, b)` → two statements; inline `function` lifted to `_S_return_1_fn` with external refs as params.
 
 ### Short-circuit polyfill → if block
 
@@ -214,14 +214,15 @@ if ("complete" === document.readyState) {
 
 ## Naming Convention
 
-All extracted sub-functions follow: `_sub_<parent>_<seq>_<description>`
+All extracted sub-functions follow: `_S_<parent>_<seq>_<hint>`
 
 | Component | Meaning |
 |-----------|---------|
-| `_sub_` | Prefix for extracted sub-functions |
-| `<parent>` | Parent function name, method name, or `lnXXXX` for anonymous |
+| `_S_` | Prefix for extracted sub-functions |
+| `<parent>` | Parent function name, method name, or `lXXXX` for anonymous |
 | `<seq>` | Two-digit extraction order |
-| `<description>` | `if`, `else`, `try`, `catch`, `init_vars`, `iife_body`... |
+| `<hint>` | `if`, `else`, `try`, `catch`, `init_vars`, `iife_body`... |
+| `_L<line>` | (Collision only) Source line disambiguator |
 
 ## API
 

@@ -1052,8 +1052,7 @@ function extractInlineFunctions(ast) {
     if (t.isReturnStatement(node) && node.argument) {
       const fn = findEmbeddedFn(node.argument);
       if (fn && t.isBlockStatement(fn.body)) {
-        const ln = node.loc ? node.loc.start.line : ++count;
-        const name = uniqueName(`_sub_return_L${ln}_fn`);
+        const name = uniqueName(`_S_return_${++count}_fn`);
         // Collect external refs from the function body
         const fnParamNames = new Set(fn.params.map((p) => (t.isIdentifier(p) ? p.name : null)).filter(Boolean));
         const defined = collectDefined(fn.body.body);
@@ -1079,8 +1078,7 @@ function extractInlineFunctions(ast) {
         if (decl.init && (t.isFunctionExpression(decl.init) || t.isArrowFunctionExpression(decl.init)) &&
             t.isBlockStatement(decl.init.body) && decl.init.body.body.length > 0) {
           const varName = t.isIdentifier(decl.id) ? decl.id.name : `var${count}`;
-          const ln = decl.loc ? decl.loc.start.line : count;
-          const name = uniqueName(`_sub_${varName}_L${ln}_fn`);
+          const name = uniqueName(`_S_${varName}_${count}_fn`);
           const fn = decl.init;
           const params = fn.params.map((p) => cloneParam(p));
           const vFn = t.functionDeclaration(t.identifier(name), params, fn.body);
@@ -1431,7 +1429,7 @@ function inlinePureWrappers(ast) {
     if (t.isCallExpression(node) && t.isIdentifier(node.callee) && wrappers.has(node.callee.name)) {
       const target = wrappers.get(node.callee.name);
       const params = wrapperParams.get(node.callee.name);
-      // Map params: _sub_X(a, b) -> _sub_Y(a, b). If args match params, use directly
+      // Map params: _S_X(a, b) -> _S_Y(a, b). If args match params, use directly
       if (params && node.arguments.length === params.length) {
         node.callee = t.identifier(target);
         count++;
@@ -1457,10 +1455,10 @@ function inlinePureWrappers(ast) {
   console.log(`  Inlined ${count} wrapper calls, removed ${wrappers.size} wrappers`);
 }
 
-// ---- sortByCallTree: reorder _sub_ functions by execution dependency ----
+// ---- sortByCallTree: reorder _S_ functions by execution dependency ----
 // General: topological sort so callees appear before callers.
 function sortByCallTree(ast) {
-  // Build adjacency: who calls whom (among _sub_ functions)
+  // Build adjacency: who calls whom (among _S_ functions)
   const calls = new Map(); // callerName -> [calleeName]
   const allNames = new Set();
 
@@ -1500,18 +1498,18 @@ function sortByCallTree(ast) {
     }
   }
 
-  // Separate _sub_ functions from non-_sub_ functions
+  // Separate _S_ functions from non-_S_ functions
   const subFns = [];
   const otherFns = [];
   for (const stmt of ast.program.body) {
-    if (t.isFunctionDeclaration(stmt) && stmt.id && stmt.id.name.startsWith("_sub_")) {
+    if (t.isFunctionDeclaration(stmt) && stmt.id && stmt.id.name.startsWith("_S_")) {
       subFns.push(stmt);
     } else {
       otherFns.push(stmt);
     }
   }
 
-  // Sort _sub_ functions: leaves first (inDegree=0), then dependents
+  // Sort _S_ functions: leaves first (inDegree=0), then dependents
   const queue = subFns.filter(f => (inDegree.get(f.id.name) || 0) === 0);
   const sorted = [];
   const visited = new Set(queue.map(f => f.id.name));
@@ -1532,12 +1530,12 @@ function sortByCallTree(ast) {
     }
   }
 
-  // Add remaining (circular dependencies or non-_sub_)
+  // Add remaining (circular dependencies or non-_S_)
   for (const fn of subFns) {
     if (!visited.has(fn.id.name)) sorted.push(fn);
   }
 
-  // Rebuild: non-_sub_ functions first, then sorted _sub_ functions
+  // Rebuild: non-_S_ functions first, then sorted _S_ functions
   ast.program.body = [...otherFns, ...sorted];
   console.log(`  Reordered ${sorted.length} functions by call tree`);
 }
@@ -1546,12 +1544,12 @@ function sortByCallTree(ast) {
 function inlineSingleCallerFns(ast) {
   let count = 0;
 
-  // Phase 1: count callers for each _sub_ function
+  // Phase 1: count callers for each _S_ function
   const callers = new Map(); // calleeName -> Set(callerName)
   const allSubNames = new Set();
 
   for (const stmt of ast.program.body) {
-    if (t.isFunctionDeclaration(stmt) && stmt.id && stmt.id.name.startsWith("_sub_")) {
+    if (t.isFunctionDeclaration(stmt) && stmt.id && stmt.id.name.startsWith("_S_")) {
       allSubNames.add(stmt.id.name);
     }
   }

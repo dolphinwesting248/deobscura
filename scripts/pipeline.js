@@ -55,7 +55,7 @@ function main({ input, output, split } = {}) {
   const groups = new Map();
   for (const sf of allSubFns) {
     if (!sf.id) continue;
-    const match = sf.id.name.match(/^_sub_(.+?)_\d{2}_/);
+    const match = sf.id.name.match(/^_S_(.+?)_\d{2}_/);
     const parent = match ? match[1] : "misc";
     if (!groups.has(parent)) groups.set(parent, []);
     groups.get(parent).push(sf);
@@ -183,8 +183,8 @@ function writeSingleOutput(ast, output, code) {
   const ratio = ((finalSize / code.length) * 100).toFixed(1);
   console.log(`Done! Output: ${(finalSize / 1024 / 1024).toFixed(2)} MB (${ratio}% of original)`);
 
-  const fnCount = fs.readFileSync(mainFile, "utf-8").split("\n").filter((l) => l.includes("function _sub_")).length;
-  console.log(`_sub_ function declarations in output: ${fnCount}`);
+  const fnCount = fs.readFileSync(mainFile, "utf-8").split("\n").filter((l) => l.includes("function _S_")).length;
+  console.log(`_S_ function declarations in output: ${fnCount}`);
   return generated;
 }
 
@@ -196,13 +196,13 @@ function writeSplitOutput(ast, output, code) {
   if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true });
   fs.mkdirSync(outDir, { recursive: true });
 
-  // Group _sub_ functions by parent name
+  // Group _S_ functions by parent name
   const groups = new Map();
   const otherStmts = [];
 
   for (const stmt of ast.program.body) {
-    if (t.isFunctionDeclaration(stmt) && stmt.id && stmt.id.name.startsWith("_sub_")) {
-      const match = stmt.id.name.match(/^_sub_(.+?)_\d{2}_/);
+    if (t.isFunctionDeclaration(stmt) && stmt.id && stmt.id.name.startsWith("_S_")) {
+      const match = stmt.id.name.match(/^_S_(.+?)_\d{2}_/);
       const parent = match ? match[1] : "misc";
       if (!groups.has(parent)) groups.set(parent, []);
       groups.get(parent).push(stmt);
@@ -221,9 +221,9 @@ function writeSplitOutput(ast, output, code) {
   // Generate each function separately but without prettier — batch format at end
   const generatedFns = new Map();
 
-  // Generate each _sub_ function
+  // Generate each _S_ function
   for (const stmt of ast.program.body) {
-    if (t.isFunctionDeclaration(stmt) && stmt.id && stmt.id.name.startsWith("_sub_")) {
+    if (t.isFunctionDeclaration(stmt) && stmt.id && stmt.id.name.startsWith("_S_")) {
       const fnAst = { ...ast, program: { ...ast.program, body: [stmt] } };
       generatedFns.set(stmt, generate(fnAst, {
         retainLines: false, retainFunctionParens: false,
@@ -254,8 +254,8 @@ function writeSplitOutput(ast, output, code) {
       walkCalls(fn.body, imports);
       const importLines = [];
       for (const name of imports) {
-        if (name.startsWith("_sub_")) {
-          const match = name.match(/^_sub_(.+?)_\d{2}_/);
+        if (name.startsWith("_S_")) {
+          const match = name.match(/^_S_(.+?)_\d{2}_/);
           const parent = match ? match[1] : "misc";
           importLines.push(`const ${name} = require("../${parent}/${name}");`);
         }
@@ -283,7 +283,7 @@ function writeSplitOutput(ast, output, code) {
 
 function walkCalls(node, collected) {
   if (!node || typeof node !== "object") return;
-  if (t.isCallExpression(node) && t.isIdentifier(node.callee) && node.callee.name.startsWith("_sub_")) {
+  if (t.isCallExpression(node) && t.isIdentifier(node.callee) && node.callee.name.startsWith("_S_")) {
     collected.add(node.callee.name);
   }
   for (const k of Object.keys(node)) {

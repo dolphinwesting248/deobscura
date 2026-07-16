@@ -31,7 +31,7 @@ function buildLookupIndex(fns) {
 
   for (const f of fns) {
     const words = splitWords(f.name);
-    // Add description hints from _sub_ patterns
+    // Add description hints from _S_ patterns
     const descMatch = f.name.match(/_([a-z]+(?:_[a-z]+)*)$/);
     if (descMatch) {
       const desc = descMatch[1].split("_").filter((w) => w.length > 1 && !/^\d+$/.test(w));
@@ -127,8 +127,8 @@ function analyzeStructureFallback(filepath, code) {
   }
 
   // Phase 4: summary
-  const subFns = fns.filter((f) => f.name.startsWith("_sub_"));
-  const origins = fns.filter((f) => !f.name.startsWith("_sub_"));
+  const subFns = fns.filter((f) => f.name.startsWith("_S_"));
+  const origins = fns.filter((f) => !f.name.startsWith("_S_"));
   const types = {};
   for (const f of subFns) {
     const n = f.name;
@@ -136,8 +136,8 @@ function analyzeStructureFallback(filepath, code) {
     else if (n.match(/_if$/) || n.match(/_else$/)) types.ifElse = (types.ifElse || 0) + 1;
     else if (n.includes("_iife") || n.includes("_init_")) types.iife = (types.iife || 0) + 1;
     else if (n.includes("_case")) types.switch = (types.switch || 0) + 1;
-    else if (n.startsWith("_sub_return_fn")) types.inlineFn = (types.inlineFn || 0) + 1;
-    else if (n.startsWith("_sub_program")) types.program = (types.program || 0) + 1;
+    else if (n.startsWith("_S_return_")) types.inlineFn = (types.inlineFn || 0) + 1;
+    else if (n.startsWith("_S_program")) types.program = (types.program || 0) + 1;
     else types.other = (types.other || 0) + 1;
   }
 
@@ -172,7 +172,7 @@ function analyzeStructureFallback(filepath, code) {
   const leaves = fns.filter((f) => f.calls.length === 0 && f.calledBy.length > 0);
   const groupEdges = {};
   for (const f of fns) {
-    const m = f.name.match(/^_sub_(.+?)_\d{2}_/);
+    const m = f.name.match(/^_S_(.+?)_\d{2}_/);
     const grp = m ? m[1] : "top-level";
     groupEdges[grp] = (groupEdges[grp] || 0) + f.calls.length + f.calledBy.length;
   }
@@ -195,12 +195,15 @@ function analyzeStructureFallback(filepath, code) {
     alerts,
     lookup,
     naming: {
-      format: "_sub_<parent>_<seq>_<description>",
+      format: "_S_<parent>_<seq>_<hint>",
+      collision: "_S_<parent>_L<line>_<seq>_<hint> (when name collides)",
       examples: [
-        { name: "_sub_0x28bed7_01_try", meaning: "Extracted from function 0x28bed7, sequence 01, try body" },
-        { name: "_sub_constructor_07_if", meaning: "Extracted from method 'constructor', sequence 07, if branch" },
+        { name: "_S_0x28bed7_01_try", meaning: "Extracted from function 0x28bed7, seq 01, try body" },
+        { name: "_S_constructor_07_if", meaning: "Extracted from method 'constructor', seq 07, if branch" },
+        { name: "_S_l100877_03_try", meaning: "Anonymous parent at line 100877, seq 03, try body" },
+        { name: "_S_return_1_fn", meaning: "Inline function lifted from a return statement" },
       ],
-      hints: { try: "try block body", catch: "catch handler", if: "if branch", else: "else branch" },
+      hints: { try: "try block body", catch: "catch handler", if: "if branch", else: "else branch", fn: "inline function" },
     },
     functions: fns,
   };
@@ -365,8 +368,8 @@ function analyzeStructure(filepath, opts) {
   }
 
   // Phase 3: summary
-  const subFns = fns.filter((f) => f.name.startsWith("_sub_"));
-  const origins = fns.filter((f) => !f.name.startsWith("_sub_"));
+  const subFns = fns.filter((f) => f.name.startsWith("_S_"));
+  const origins = fns.filter((f) => !f.name.startsWith("_S_"));
   const types = {};
   for (const f of subFns) {
     const n = f.name;
@@ -374,8 +377,8 @@ function analyzeStructure(filepath, opts) {
     else if (n.match(/_if$/) || n.match(/_else$/)) types.ifElse = (types.ifElse || 0) + 1;
     else if (n.includes("_iife") || n.includes("_init_")) types.iife = (types.iife || 0) + 1;
     else if (n.includes("_case")) types.switch = (types.switch || 0) + 1;
-    else if (n.startsWith("_sub_return_fn")) types.inlineFn = (types.inlineFn || 0) + 1;
-    else if (n.startsWith("_sub_program")) types.program = (types.program || 0) + 1;
+    else if (n.startsWith("_S_return_")) types.inlineFn = (types.inlineFn || 0) + 1;
+    else if (n.startsWith("_S_program")) types.program = (types.program || 0) + 1;
     else types.other = (types.other || 0) + 1;
   }
 
@@ -444,7 +447,7 @@ function analyzeStructure(filepath, opts) {
   // Hot groups: count edges per parent group
   const groupEdges = {};
   for (const f of fns) {
-    const m = f.name.match(/^_sub_(.+?)_\d{2}_/);
+    const m = f.name.match(/^_S_(.+?)_\d{2}_/);
     const grp = m ? m[1] : "top-level";
     groupEdges[grp] = (groupEdges[grp] || 0) + f.calls.length + f.calledBy.length;
   }
@@ -495,13 +498,14 @@ function analyzeStructure(filepath, opts) {
     alerts,
     lookup,
     naming: {
-      format: "_sub_<parent>_<seq>_<description>",
+      format: "_S_<parent>_<seq>_<hint>",
+      collision: "_S_<parent>_L<line>_<seq>_<hint> (when name collides)",
       examples: [
-        { name: "_sub_0x28bed7_01_try", meaning: "Extracted from function 0x28bed7, sequence 01, try body" },
-        { name: "_sub_constructor_07_if", meaning: "Extracted from method 'constructor', sequence 07, if branch" },
-        { name: "_sub_ln100877_07_else", meaning: "Extracted from anonymous function at line 100877, sequence 07, else branch" },
-        { name: "_sub_program_init_vars_ln1149", meaning: "Top-level program IIFE at line 1149, variable initialization" },
-        { name: "_sub_return_fn1", meaning: "Inline function expression lifted from a return statement" },
+        { name: "_S_0x28bed7_01_try", meaning: "Extracted from function 0x28bed7, seq 01, try body" },
+        { name: "_S_constructor_07_if", meaning: "Extracted from method 'constructor', seq 07, if branch" },
+        { name: "_S_l100877_03_try", meaning: "Anonymous parent at line 100877, seq 03, try body" },
+        { name: "_S_program_init_vars_l1149", meaning: "Top-level program IIFE at line 1149, variable initialization" },
+        { name: "_S_return_1_fn", meaning: "Inline function lifted from a return statement" },
       ],
       hints: {
         try: "try block body",
@@ -605,7 +609,7 @@ function detectSemanticTags(name, stmt) {
   const body = stmt.body;
   if (!t.isBlockStatement(body)) return tags;
 
-  // Self-modifying: fn = function... or fn = _sub_...
+  // Self-modifying: fn = function... or fn = _S_...
   let selfMod = false;
   let propSetters = 0; let hasRegex = false; let hasBigArray = false;
   let buildCount = 0;
@@ -663,7 +667,7 @@ function detectSemanticTags(name, stmt) {
   if (buildCount >= 2) tags.push("table-init");
   if (hasBigArray) tags.push("table-init");
   if (hasRegex && propSetters >= 2) tags.push("integrity-check");
-  if (name.startsWith("_sub_program")) tags.push("module-init");
+  if (name.startsWith("_S_program")) tags.push("module-init");
 
   return tags;
 }
@@ -930,7 +934,7 @@ function generateReadingGuide(report) {
   // 4. What you can skip
   const skippable = functions.filter((f) => {
     const isMech = /forward|pure computation|pass-through/.test(f.description || "");
-    const isData = f.name.includes("_sub_return_fn") && f.bodyLen <= 3;
+    const isData = f.name.includes("_S_return_") && f.bodyLen <= 3;
     const isUtil = !f.flat && f.complexity <= 1 && f.calledBy.length === 0 && f.calls.length === 0;
     return isMech || isData || isUtil;
   });
@@ -1014,14 +1018,15 @@ ${functions.filter((f) => f.calls.length > 0).map((f) =>
 
 ## Naming Convention`}
 
-All sub-functions follow the format: \`_sub_<parent>_<seq>_<description>\`
+All sub-functions follow the format: \`_S_<parent>_<seq>_<hint>\`
 
 | Component | Meaning |
 |-----------|---------|
-| \`_sub_\` | Prefix indicating an extracted sub-function |
-| \`<parent>\` | The parent function name, object method name, or line number (\`lnXXXX\`) for anonymous functions |
+| \`_S_\` | Prefix indicating an extracted sub-function |
+| \`<parent>\` | The parent function name, object method name, or line number (\`lXXXX\`) for anonymous functions |
 | \`<seq>\` | Two-digit sequence number indicating extraction order within the parent |
-| \`<description>\` | Short hint about the extracted code structure |
+| \`<hint>\` | Short hint about the extracted code structure |
+| \`_L<line>\` | (Collision only) Source line number appended when name would otherwise collide |
 
 ### Examples
 
@@ -1269,7 +1274,7 @@ function generateIndex(outputDir, opts) {
 
 function categorizeFn(name, fn, meta) {
   if (meta && meta.heavyHex) return "data";
-  if (!name.startsWith("_sub_")) return "core";
+  if (!name.startsWith("_S_")) return "core";
 
   const labels = meta && meta.alertLabels ? meta.alertLabels : null;
   const src = meta && meta.srcText ? meta.srcText : "";
@@ -1296,7 +1301,7 @@ function categorizeFn(name, fn, meta) {
   if (/\b(__esModule|Object\.defineProperty|d\s*\(\s*exports|exports\s*\[)\b/.test(src)) return "boilerplate";
 
   // Structural patterns — AFTER domain checks so try/catch with domain code wins
-  if (name.includes("_sub_return_fn") || name.includes("_sub_return_L")) return "callback";
+  if (name.includes("_S_return_") || name.includes("_S_return_L")) return "callback";
   if (/_(if|else|try|catch|case)(?:_\d+)?$/.test(name)) return "branch";
 
   return "other";
@@ -1454,14 +1459,15 @@ ${allAlerts.length > 40 ? `| … | … | _+${allAlerts.length - 40} more_ | … 
 `}
 ## Naming Convention
 
-All sub-functions follow the format: \`_sub_<parent>_<seq>_<description>\`
+All sub-functions follow the format: \`_S_<parent>_<seq>_<hint>\`
 
 | Component | Meaning |
 |-----------|---------|
-| \`_sub_\` | Prefix indicating an extracted sub-function |
-| \`<parent>\` | Parent function name, method name, or \`lnXXXX\` for anonymous functions |
+| \`_S_\` | Prefix indicating an extracted sub-function |
+| \`<parent>\` | Parent function name, method name, or \`lXXXX\` for anonymous functions |
 | \`<seq>\` | Two-digit extraction order within the parent |
-| \`<description>\` | Short hint about the extracted code structure |
+| \`<hint>\` | Short hint about the extracted code structure |
+| \`_L<line>\` | (Collision only) Source line disambiguator |
 
 ### Hint Descriptions
 
