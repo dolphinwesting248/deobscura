@@ -232,10 +232,10 @@ const DOMAIN_RULES = [
   { tag: "DOM manipulation", regex: /\binnerHTML\b|\bcreateElement\b|\bappendChild\b|\bquerySelector\b|\bgetElementById\b/ },
   { tag: "Event-driven", regex: /\baddEventListener\b/, minCount: 3 },
   // Security-relevant
-  { tag: "Crypto", regex: /\b(crypto|encrypt|decrypt|hmac|md5|sha\d+)\b/i },
+  { tag: "Crypto", regex: /\b(crypto|encrypt|decrypt|hmac|md5|sha\d+)\b/i, exclude: /\b(crypto\.subtle|crypto\.getRandomValues|window\.crypto|globalThis\.crypto)\b/ },
   { tag: "Signing", regex: /\b(sign\w*(?:V2|Init|Request)?\s*\(|xhsSign|_sign\b|signKey)\b/i },
   { tag: "Protobuf", regex: /\b(protobuf|protobufjs|\.(?:encode|decode|verify|fromObject|toObject)\s*\()/, exclude: /\b(Text(?:Encoder|Decoder)|encodeURI(?:Component)?|decodeURI(?:Component)?)\b/ },
-  { tag: "WebSocket", regex: /\b(websocket|ws\b\.|gateway|socket\.io|Reconnect)|WebSocket\b/i },
+  { tag: "WebSocket", regex: /\b(websocket|ws\b\.|gateway|socket\.io|Reconnect)|WebSocket\b/i, exclude: /\b(ReadableStream|WritableStream|TransformStream)\b/ },
   { tag: "Graphics", regex: /\bWebGL\b|\bgetContext\s*\(\s*['"]2d['"]\s*\)|drawImage\b|createTexture\b/i },
   // Polyfills
   { tag: "Prototype-patched", regex: /\bprototype\s*\.\s*\w+\s*=/ },

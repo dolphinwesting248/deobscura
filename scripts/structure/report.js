@@ -198,11 +198,14 @@ function generatePromptFile(outputDir) {
     .sort((a, b) => (b.calledBy.length + b.calls.length) - (a.calledBy.length + a.calls.length));
 
   // Top 5 by interest score (alerts × 3 + complexity + heat + size bonus)
+  // Deprioritize single-letter names (minified artifacts, not meaningful)
   const significantAlerts = alerts.filter(a => a.severity !== "info" && a.severity !== "low");
-  const scored = functions.map((f) => ({
-    ...f,
-    score: (significantAlerts.filter((a) => a.fn === f.name).length * 3) + (f.complexity || 1) + Math.min(f.calledBy.length, 20) + Math.min(Math.floor((f.bodyLen || 0) / 50), 10)
-  })).sort((a, b) => b.score - a.score).slice(0, 5);
+  const scored = functions
+    .filter((f) => f.name.length > 2 || f.calls.length > 0) // skip single-letter leaf functions
+    .map((f) => ({
+      ...f,
+      score: (significantAlerts.filter((a) => a.fn === f.name).length * 3) + (f.complexity || 1) + Math.min(f.calledBy.length, 20) + Math.min(Math.floor((f.bodyLen || 0) / 50), 10) + (f.name.length <= 2 ? -5 : 0)
+    })).sort((a, b) => b.score - a.score).slice(0, 5);
 
   // Pass-through count
   const passThrough = functions.filter((f) => (f.description || "").includes("pass-through")).length;

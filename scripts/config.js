@@ -15,6 +15,11 @@ const DEFAULT_DENOISE = [
   { match: "\\.(js|css|svg|png|jpg|woff2?|ttf|exe|dmg|zip|map|wasm)([?#]|$)", label: "Static File", severity: "low" },
   { match: "Math\\.sign|CreateMethodProperty.*sign", label: "Polyfill", severity: "info" },
   { match: "https?://[^/]+/$",           label: "Self-domain URL", severity: "info" },
+  // Framework-internal patterns (not security concerns)
+  { match: "dangerouslySetInnerHTML|__html", label: "Framework Internal", severity: "info" },
+  { match: "innerHTML|outerHTML",       label: "Framework Internal", severity: "info" },
+  { match: "sessionStorage|localStorage", label: "Framework Internal", severity: "info" },
+  { match: "new Function|Function\\(",  label: "Framework Internal", severity: "info" },
 ];
 
 module.exports = { parser, generate, t, fs, path, DEFAULT_DENOISE };
