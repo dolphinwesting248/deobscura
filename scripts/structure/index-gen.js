@@ -128,8 +128,12 @@ function generateIndex(outputDir, opts) {
 
   for (const [cat, fns] of Object.entries(groups)) {
     if (fns.length === 0) continue;
+    // Separate return stubs (auto-generated callbacks with 1 caller) from meaningful functions
+    const stubs = fns.filter(f => /^_S_return_\d+_fn$/.test(f.name) && f.calledBy.length <= 1 && (f.description || "").includes("callback"));
+    const meaningful = fns.filter(f => !stubs.includes(f));
+
     lines.push(`## fn/${cat}  (${fns.length})`);
-    for (const f of fns) {
+    for (const f of meaningful) {
       const flines = f.lines[0] ? `L${f.lines[0]}-${f.lines[1]}` : "?";
       const meta = fnMeta.get(f.name) || { totalLines: 0, stmts: f.bodyLen, heavyHex: false };
       const size = `${meta.totalLines}L/${meta.stmts}S/${f.params}P`;
@@ -147,6 +151,22 @@ function generateIndex(outputDir, opts) {
       const nameDisplay = f.name.length <= 2 && parentOf.has(f.name) ? `${f.name} (←${parentOf.get(f.name)})` : f.name;
       const extras = [roles, semTags, desc, flags].filter(Boolean).join(" ; ");
       lines.push(`${nameDisplay} | ${flines} | ${size} | cc=${f.complexity || 1}${calls}${calledBy}${extras ? " | " + extras : ""}`);
+    }
+    if (stubs.length >= 3) {
+      const ccRange = stubs.map(f => f.complexity || 1).sort((a, b) => a - b);
+      const ccMin = ccRange[0]; const ccMax = ccRange[ccRange.length - 1];
+      const lineRange = stubs.filter(f => f.lines[0]).map(f => f.lines[0]).sort((a, b) => a - b);
+      const lRange = lineRange.length > 0 ? `L${lineRange[0]}-${lineRange[lineRange.length - 1]}` : "?";
+      lines.push(`... +${stubs.length} auto-generated callbacks (${lRange}, cc=${ccMin}-${ccMax})`);
+    } else {
+      // Show individually if few
+      for (const f of stubs) {
+        const flines = f.lines[0] ? `L${f.lines[0]}-${f.lines[1]}` : "?";
+        const meta = fnMeta.get(f.name) || { totalLines: 0, stmts: f.bodyLen, heavyHex: false };
+        const size = `${meta.totalLines}L/${meta.stmts}S/${f.params}P`;
+        const calledBy = f.calledBy.length > 0 ? " ⇐ " + f.calledBy.slice(0, 5).join(", ") : "";
+        lines.push(`${f.name} | ${flines} | ${size} | cc=${f.complexity || 1}${calledBy} | auto-generated callback`);
+      }
     }
     lines.push("");
   }

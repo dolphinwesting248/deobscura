@@ -170,7 +170,7 @@ const CONFIG_TEMPLATE = `
 /** @type {import('deob').DeobConfig} */
 module.exports = {
   // Input: a single file, a directory, or an array of paths
-  input: "src/main.js",
+  input: "main.js",
   // input: ["src/a.js", "src/b.js", "src/sub/"],
 
   // Output directory (optional — auto-derived from input if omitted)
