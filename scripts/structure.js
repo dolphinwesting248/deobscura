@@ -306,9 +306,10 @@ function analyzeStructure(filepath, opts) {
             n.arguments.length > 0) {
           suspicious.push("new Function()");
         }
-        // obj[computed_key]
-        if (t.isMemberExpression(n) && n.computed && t.isIdentifier(n.property)) {
-          suspicious.push("computed key");
+        // obj[computed_key] — only flag suspicious key patterns, not all bracket access
+        if (t.isMemberExpression(n) && n.computed && t.isStringLiteral(n.property) &&
+            /__(?:proto|proto__|defineProperty|lookupGetter|lookupSetter)__/.test(n.property.value)) {
+          suspicious.push("dangerous key: " + n.property.value);
         }
         // arguments[i]
         if (t.isMemberExpression(n) && t.isIdentifier(n.object) && n.object.name === "arguments" &&
@@ -834,11 +835,27 @@ function classifyDomain(filepath) {
     // Bundlers — check FIRST, take priority
     if (/\bself\.(rspack|webpack)(Chunk|_require_)/.test(src)) tags.push("rspack/webpack chunk");
     else if (/\b__webpack_require__\b|\b__webpack_modules__\b/.test(src)) tags.push("webpack bundle");
+    if (/\bTURBOPACK\b|\bturbopack\b/.test(src)) tags.push("turbopack runtime");
     if (/\bmodule\.exports\b|\bexports\[/.test(src) && /\brequire\s*\(/.test(src)) tags.push("CommonJS");
     if (/\bdefine\s*\(\s*(['"]|function)/.test(src)) tags.push("AMD");
+    // Framework detection — before generic DOM/network
+    if (/\b__VUE__\b|\bvue\b.*\breactive\b|\bVue\b.*\bcomponent\b/i.test(src)) tags.push("Vue");
+    if (/\b__REACT_DEVTOOLS_GLOBAL_HOOK__\b|\bReactDOM\b/.test(src)) tags.push("React");
+    if (/\b__ANGULAR__\b|\b@NgModule\b|\bzone\.js\b/i.test(src)) tags.push("Angular");
+    if (/\b__svelte\b|\bSvelte\b.*\bcompile\b/i.test(src)) tags.push("Svelte");
+    if (/\b__NEXT_DATA__\b|\b__next\b/i.test(src)) tags.push("Next.js");
+    if (/\b__nuxt\b|\bNuxt\b/i.test(src)) tags.push("Nuxt");
+    // Module runtimes
+    if (/\bimportScripts\b|\bWorker\b.*\bimport\b/i.test(src)) tags.push("Worker runtime");
     if (/\bprocess\.(?!env)/.test(src)) tags.push("Node.js");
-    if (/\bwindow\b|\bdocument\.|\baddEventListener\b/.test(src)) tags.push("Browser DOM");
-    if (/\bfetch\s*\(|\bXMLHttpRequest\b|\baxios\b/.test(src)) tags.push("Network");
+    // DOM — require specific manipulation patterns, not just window/document
+    if (/\binnerHTML\b|\bcreateElement\b|\bappendChild\b|\bquerySelector\b|\bgetElementById\b/.test(src)) tags.push("DOM manipulation");
+    if (/\baddEventListener\b/.test(src) && (src.match(/\baddEventListener\b/g) || []).length > 3) tags.push("Event-driven");
+    // Network — require actual HTTP client patterns
+    const hasFetch = /\bfetch\s*\(/.test(src);
+    const hasXHR = /\bXMLHttpRequest\b/.test(src);
+    const hasAxios = /\baxios\b/.test(src);
+    if ((hasFetch && hasXHR) || hasAxios || (hasFetch && /https?:\/\/[^\s"']+/g.test(src))) tags.push("Network");
     if (/\b(crypto|encrypt|decrypt|hmac|md5|sha\d+)\b/i.test(src)) tags.push("Crypto");
     // Specific domain signatures
     if (/\b(sign\w*(?:V2|Init|Request)?\s*\(|xhsSign|_sign\b|signKey)\b/i.test(src)) tags.push("Signing");
@@ -847,7 +864,8 @@ function classifyDomain(filepath) {
     if (/\b(protobuf|protobufjs|\.(?:encode|decode|verify|fromObject|toObject)\s*\()/.test(src) &&
         !/\b(Text(?:Encoder|Decoder)|encodeURI(?:Component)?|decodeURI(?:Component)?)\b/.test(src)) tags.push("Protobuf");
     if (/\b(websocket|ws\b\.|gateway|socket\.io|Reconnect)|WebSocket\b/i.test(src)) tags.push("WebSocket");
-    if (/\bWebGL|canvas\b|sprite\b|texture\b/i.test(src)) tags.push("Graphics");
+    // Graphics — require specific rendering API patterns
+    if (/\bWebGL\b|\bgetContext\s*\(\s*['"]2d['"]\s*\)|drawImage\b|createTexture\b/i.test(src)) tags.push("Graphics");
     if (/\bprototype\s*\.\s*\w+\s*=/.test(src)) tags.push("Prototype-patched");
     const evals = (src.match(/\beval\s*\(/g) || []).length;
     if (evals > 5) tags.push("Eval-heavy");
@@ -1252,18 +1270,16 @@ function generateIndex(outputDir, opts) {
 function categorizeFn(name, fn, meta) {
   if (meta && meta.heavyHex) return "data";
   if (!name.startsWith("_sub_")) return "core";
-  if (name.includes("_sub_return_fn")) return "callback";
-  if (/_(if|else|try|catch|case)$/.test(name)) return "branch";
 
   const labels = meta && meta.alertLabels ? meta.alertLabels : null;
   const src = meta && meta.srcText ? meta.srcText : "";
   const desc = fn.description || "";
 
+  // Domain-specific checks FIRST — take priority over structural patterns
   if (labels && labels.has("Network")) return "network";
   if (labels && labels.has("Crypto")) return "crypto";
   if (labels && labels.has("Eval / Dynamic")) return "dynamic";
 
-  // Scan source text for domain keywords
   if (/\b(axios|fetch|xhr\b|XMLHttpRequest|User-Agent|responseType|rateLimit|FormData|x-www-form)\b/i.test(src)) return "network";
   if (/\b(websocket|ws\.|readyState|WebSocket|handshake|close code|terminate|ping\b|pong\b|subprotocol|permessage-deflate|_socket\b)\b/i.test(src)) return "websocket";
   if (/\b(crypto|sha512|sha256|hmac|md5|encrypt|decrypt|sign\b|cipher\b|hash\b|randomBytes|pbkdf2)\b/i.test(src)) return "crypto";
@@ -1272,13 +1288,16 @@ function categorizeFn(name, fn, meta) {
   if (/\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__)\b/i.test(src)) return "polyfill";
   if (/\b(fs\.|fse\.|chmod|chown|statSync|mkdir|readFile|writeFile|copyFile|unlink|Buffer\.|glob\b|readdir|rmSync)\b/i.test(src)) return "filesystem";
 
-  // Sub-categorize "other" by behavioral descriptions (shrink the junk drawer)
+  // Behavioral descriptors
   if (/_setTimeout|_setInterval|_debounce|_throttle/.test(name)) return "timer";
   if (desc.includes("factory") || desc.includes("construct")) return "construct";
   if (desc.includes("pass-through") || desc.includes("returns arg") || desc.includes("calls expr")) return "delegate";
   if (/arguments\[/.test((fn.suspicious || []).join(" "))) return "varargs";
-  // Webpack/rspack boilerplate: __esModule, Object.defineProperty wrappers, module-map entries
   if (/\b(__esModule|Object\.defineProperty|d\s*\(\s*exports|exports\s*\[)\b/.test(src)) return "boilerplate";
+
+  // Structural patterns — AFTER domain checks so try/catch with domain code wins
+  if (name.includes("_sub_return_fn") || name.includes("_sub_return_L")) return "callback";
+  if (/_(if|else|try|catch|case)(?:_\d+)?$/.test(name)) return "branch";
 
   return "other";
 }
