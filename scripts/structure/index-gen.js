@@ -36,7 +36,7 @@ function generateIndex(outputDir, opts) {
 
   const lines = [];
   lines.push(`# ${report.file} · Function Index · ${summary.totalFunctions} functions`);
-  lines.push(`_Previous: 1-structure.md  →  **Now: 2-index.txt**  →  Jump to ${OUTPUT_FILES.MAIN} by line number._`);
+  lines.push(`_Previous: 1-structure.md  →  **Now: 2-index.txt**  →  Jump to ${OUTPUT_FILES.MAIN} by function name._`);
   lines.push("");
 
   // Entry points
@@ -45,7 +45,7 @@ function generateIndex(outputDir, opts) {
     lines.push("## entry");
     for (const f of roots) {
       const flags = [f.flat ? "FLAT" : "", ...(f.suspicious || [])].filter(Boolean).join(" ");
-      lines.push(`${f.name} | L${f.lines[0]}-${f.lines[1]} | cc=${f.complexity || 1} | → ${f.calls.join(", ") || "—"}${flags ? " | " + flags : ""}`);
+      lines.push(`${f.name} | cc=${f.complexity || 1} | → ${f.calls.join(", ") || "—"}${flags ? " | " + flags : ""}`);
     }
     lines.push("");
   }
@@ -90,8 +90,7 @@ function generateIndex(outputDir, opts) {
   if (suspiciousFns.length > 0) {
     lines.push("## suspicious");
     for (const f of suspiciousFns) {
-      const flines = f.lines[0] ? `L${f.lines[0]}` : "?";
-      lines.push(`${f.name} | ${flines} | ${(f.suspicious || []).join(", ")}`);
+      lines.push(`${f.name} | ${(f.suspicious || []).join(", ")}`);
     }
     lines.push("");
   }
@@ -101,8 +100,7 @@ function generateIndex(outputDir, opts) {
   if (flatFns.length > 0) {
     lines.push("## flat");
     for (const f of flatFns) {
-      const flines = f.lines[0] ? `L${f.lines[0]}` : "?";
-      lines.push(`${f.name} | ${flines} | cc=${f.complexity || 1} | while+switch`);
+      lines.push(`${f.name} | cc=${f.complexity || 1} | while+switch`);
     }
     lines.push("");
   }
@@ -134,9 +132,8 @@ function generateIndex(outputDir, opts) {
 
     lines.push(`## fn/${cat}  (${fns.length})`);
     for (const f of meaningful) {
-      const flines = f.lines[0] ? `L${f.lines[0]}-${f.lines[1]}` : "?";
       const meta = fnMeta.get(f.name) || { totalLines: 0, stmts: f.bodyLen, heavyHex: false };
-      const size = `${meta.totalLines}L/${meta.stmts}S/${f.params}P`;
+      const size = `${meta.stmts}S/${f.params}P`;
       const calls = f.calls.length > 0 ? " → " + f.calls.join(", ") : "";
       const calledBy = f.calledBy.length > 0 ? " ⇐ " + f.calledBy.slice(0, 5).join(", ") + (f.calledBy.length > 5 ? " +" + (f.calledBy.length - 5) : "") : f.calls.length > 0 ? " root" : "";
       const semTags = (f.semanticTags || []).join(" ");
@@ -150,22 +147,19 @@ function generateIndex(outputDir, opts) {
       // Disambiguate single-letter names with parent context
       const nameDisplay = f.name.length <= 2 && parentOf.has(f.name) ? `${f.name} (←${parentOf.get(f.name)})` : f.name;
       const extras = [roles, semTags, desc, flags].filter(Boolean).join(" ; ");
-      lines.push(`${nameDisplay} | ${flines} | ${size} | cc=${f.complexity || 1}${calls}${calledBy}${extras ? " | " + extras : ""}`);
+      lines.push(`${nameDisplay} | ${size} | cc=${f.complexity || 1}${calls}${calledBy}${extras ? " | " + extras : ""}`);
     }
     if (stubs.length >= 3) {
       const ccRange = stubs.map(f => f.complexity || 1).sort((a, b) => a - b);
       const ccMin = ccRange[0]; const ccMax = ccRange[ccRange.length - 1];
-      const lineRange = stubs.filter(f => f.lines[0]).map(f => f.lines[0]).sort((a, b) => a - b);
-      const lRange = lineRange.length > 0 ? `L${lineRange[0]}-${lineRange[lineRange.length - 1]}` : "?";
-      lines.push(`... +${stubs.length} auto-generated callbacks (${lRange}, cc=${ccMin}-${ccMax})`);
+      lines.push(`... +${stubs.length} auto-generated callbacks (cc=${ccMin}-${ccMax})`);
     } else {
       // Show individually if few
       for (const f of stubs) {
-        const flines = f.lines[0] ? `L${f.lines[0]}-${f.lines[1]}` : "?";
         const meta = fnMeta.get(f.name) || { totalLines: 0, stmts: f.bodyLen, heavyHex: false };
-        const size = `${meta.totalLines}L/${meta.stmts}S/${f.params}P`;
+        const size = `${meta.stmts}S/${f.params}P`;
         const calledBy = f.calledBy.length > 0 ? " ⇐ " + f.calledBy.slice(0, 5).join(", ") : "";
-        lines.push(`${f.name} | ${flines} | ${size} | cc=${f.complexity || 1}${calledBy} | auto-generated callback`);
+        lines.push(`${f.name} | ${size} | cc=${f.complexity || 1}${calledBy} | auto-generated callback`);
       }
     }
     lines.push("");
