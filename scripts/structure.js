@@ -315,11 +315,7 @@ function analyzeStructure(filepath, opts) {
             /__(?:proto|proto__|defineProperty|lookupGetter|lookupSetter)__/.test(n.property.value)) {
           suspicious.push("dangerous key: " + n.property.value);
         }
-        // arguments[i]
-        if (t.isMemberExpression(n) && t.isIdentifier(n.object) && n.object.name === "arguments" &&
-            !t.isIdentifier(n.property)) {
-          suspicious.push("arguments[i]");
-        }
+        // arguments[i] — removed: varargs iteration is normal, not suspicious
         // __proto__ assignment
         if (t.isAssignmentExpression(n) && t.isMemberExpression(n.left) &&
             t.isIdentifier(n.left.property, { name: "__proto__" })) {
@@ -873,6 +869,7 @@ function classifyDomain(filepath) {
     // Graphics — require specific rendering API patterns
     if (/\bWebGL\b|\bgetContext\s*\(\s*['"]2d['"]\s*\)|drawImage\b|createTexture\b/i.test(src)) tags.push("Graphics");
     if (/\bprototype\s*\.\s*\w+\s*=/.test(src)) tags.push("Prototype-patched");
+    if (/\b(ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor|CreateMethodProperty|__core-js_shared__)\b/.test(src)) tags.push("Polyfill/Core-JS");
     const evals = (src.match(/\beval\s*\(/g) || []).length;
     if (evals > 5) tags.push("Eval-heavy");
     return tags.length > 0 ? tags.join(" + ") : "General JS";
@@ -1079,8 +1076,10 @@ function generatePromptFile(outputDir) {
   // Pass-through count
   const passThrough = functions.filter((f) => (f.description || "").includes("pass-through")).length;
 
-  const content = `You are analyzing deobfuscated JavaScript from \`${file}\`. The preprocessor already determined:
+  const zeroFnWarning = summary.totalFunctions === 0 ? `\n> **WARNING**: 0 functions extracted. This file may be data-only, heavily obfuscated (control-flow flattening / VM-based), or non-JS content. The analysis below is empty — consider manual inspection.\n` : "";
 
+  const content = `You are analyzing deobfuscated JavaScript from \`${file}\`. The preprocessor already determined:
+${zeroFnWarning}
 ## Architecture
 - ${summary.totalFunctions} functions (${summary.originalFunctions} original, ${summary.subFunctions} extracted)
 - Domain: **${domain}**
@@ -1292,7 +1291,7 @@ function categorizeFn(name, fn, meta) {
   if (/\b(crypto|sha512|sha256|hmac|md5|encrypt|decrypt|sign\b|cipher\b|hash\b|randomBytes|pbkdf2)\b/i.test(src)) return "crypto";
   if (/\b(yaml|parser|scalar|blockMap|blockSeq|flowSeq|resolved\b|YAML\b)\b/i.test(src)) return "parser";
   if (/\b(i18n|i18next|translat|lng\b|interpolat|plural|namespace|resStore|ns\b)\b/i.test(src)) return "i18n";
-  if (/\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__)\b/i.test(src)) return "polyfill";
+  if (/\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__|ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor)\b/i.test(src)) return "polyfill";
   if (/\b(fs\.|fse\.|chmod|chown|statSync|mkdir|readFile|writeFile|copyFile|unlink|Buffer\.|glob\b|readdir|rmSync)\b/i.test(src)) return "filesystem";
 
   // Behavioral descriptors

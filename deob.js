@@ -148,6 +148,8 @@ const DEFAULT_DENOISE = [
   { match: "\\.(js|css|svg|png|jpg|woff2?|ttf|exe|dmg|zip|map|wasm)([?#]|$)", label: "Static File", severity: "low" },
   // Math.sign in polyfill context → not crypto signing
   { match: "Math\\.sign|CreateMethodProperty.*sign", label: "Polyfill", severity: "info" },
+  // Self-referencing domain URLs (no path) — first-party page URL, not exfiltration
+  { match: "https?://[^/]+/$",           label: "Self-domain URL", severity: "info" },
 ];
 
 function parseConfig(filepath) {
