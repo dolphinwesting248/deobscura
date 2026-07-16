@@ -88,7 +88,7 @@ function eliminateDeadCode(ast) {
 // ---- removeUnusedHelpers: delete function declarations that are never referenced ----
 // General approach: any function declaration whose name never appears as an Identifier
 // (outside its own definition) is dead. Works on any obfuscated codebase.
-function removeUnusedHelpers(ast) {
+function removeUnusedHelpers(ast, refGraph) {
   let removed = 0;
 
   // Phase 1: collect all function declaration names + their definition sites
@@ -127,27 +127,33 @@ function removeUnusedHelpers(ast) {
   collectFnDecls(ast, null);
 
   // Phase 2: collect all identifier usages (references to function names)
-  const referenced = new Set();
-  function collectRefs(node, contextFn) {
-    if (!node || typeof node !== "object") return;
+  let referenced;
+  if (refGraph) {
+    // Reuse shared refGraph — all identifiers already collected
+    referenced = refGraph.referenced;
+  } else {
+    referenced = new Set();
+    function collectRefs(node, parent, parentKey) {
+      if (!node || typeof node !== "object") return;
 
-    // Track which function scope we're in
-    let newContext = contextFn;
-    if (t.isFunctionDeclaration(node) && node.id) newContext = node;
+      if (t.isIdentifier(node)) {
+        // Skip declaration-site names (function id, variable declarator id)
+        const isDeclName = (parent && t.isFunctionDeclaration(parent) && parentKey === "id") ||
+                           (parent && t.isVariableDeclarator(parent) && parentKey === "id");
+        if (!isDeclName) {
+          referenced.add(node.name);
+        }
+      }
 
-    // Identifier used as callee, argument, assignment, or any expression
-    if (t.isIdentifier(node)) {
-      referenced.add(node.name);
+      for (const key of Object.keys(node)) {
+        if (SKIP_KEYS.has(key)) continue;
+        const val = node[key];
+        if (Array.isArray(val)) { for (const v of val) collectRefs(v, node, key); }
+        else if (val && typeof val.type === "string") collectRefs(val, node, key);
+      }
     }
-
-    for (const key of Object.keys(node)) {
-      if (SKIP_KEYS.has(key)) continue;
-      const val = node[key];
-      if (Array.isArray(val)) { for (const v of val) collectRefs(v, newContext); }
-      else if (val && typeof val.type === "string") collectRefs(val, newContext);
-    }
+    collectRefs(ast, null, null);
   }
-  collectRefs(ast, null);
 
   // Phase 3: filter — a name is "dead" if ALL its declarations are dead AND it's never referenced
   const deadNames = new Set();

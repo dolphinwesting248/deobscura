@@ -728,7 +728,7 @@ function normalizeSyntax(ast) {
 
 // ---- inlineConstObjects: replace obj.prop with literal value when obj is a const ----
 // Pattern: var cfg = {timeout: 5000}; ... cfg.timeout → 5000
-function inlineConstObjects(ast) {
+function inlineConstObjects(ast, refGraph) {
   let count = 0;
 
   // Phase 1: find const object declarations with all-literal properties
