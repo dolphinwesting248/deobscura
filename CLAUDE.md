@@ -91,7 +91,8 @@ deob.js                          CLI entry, config parsing, directory recursion
 scripts/
   config.js                      User-facing config: parser, t, generate, fs, path, DEFAULT_DENOISE
   constants.js                   Internal constants: RESERVED, GLOBALS, ALERT_PATTERNS, SKIP_KEYS,
-                                 SUB_FN_*, OUTPUT_FILES, THRESHOLDS, CATEGORIES, SEVERITY, NAMING_*
+                                 SUB_FN_*, OUTPUT_FILES, THRESHOLDS, CATEGORIES, SEVERITY, NAMING_*,
+                                 DOMAIN_RULES, CATEGORY_RULES, FRAMEWORK_PATTERNS
   ast-utils.js                   Generic AST walkers, pattern detectors, clone
   scope.js                       Variable scope analysis, external reference collection
   naming.js                      Sub-function naming (_S_ prefix, collision detection)
@@ -183,7 +184,7 @@ input.js
 **Does not**: Contain internal constants (those are in constants.js)
 
 ### constants.js — Internal Constants
-**Does**: Expose RESERVED, GLOBALS, ALERT_PATTERNS, SKIP_KEYS, SUB_FN_PREFIX, SUB_FN_NAME_RE, isSubFn, DEFAULT_PARSER_OPTS, JSX_PARSER_OPTS, DEFAULT_GENERATE_OPTS, OUTPUT_FILES, THRESHOLDS, CATEGORIES, SEVERITY, NAMING_*
+**Does**: Expose RESERVED, GLOBALS, ALERT_PATTERNS, SKIP_KEYS, SUB_FN_PREFIX, SUB_FN_NAME_RE, isSubFn, DEFAULT_PARSER_OPTS, JSX_PARSER_OPTS, DEFAULT_GENERATE_OPTS, OUTPUT_FILES, THRESHOLDS, CATEGORIES, SEVERITY, NAMING_*, DOMAIN_RULES, CATEGORY_RULES, FRAMEWORK_PATTERNS
 **Does not**: Contain any logic or transformation code
 
 ### ast-utils.js — Generic AST Helpers
@@ -405,58 +406,61 @@ analyzeStructure (post-pipeline)
 
 ## Function Categories
 
-Functions are categorized by `categorizeFn` in structure/analyze.js:
+Functions are categorized by `categorizeFn` in structure/analyze.js, using `CATEGORY_RULES` and `FRAMEWORK_PATTERNS` from constants.js:
 
-| Category | Detection Method | Example |
-|----------|-----------------|---------|
+| Category | Source | Example |
+|----------|--------|---------|
 | `data` | heavyHex flag | Large hex string arrays |
 | `core` | Not `_S_` prefix | Original function names |
-| `framework` | Vue/React/Regenerator patterns | Framework internals |
-| `network` | fetch/xhr/axios patterns | HTTP client code |
-| `crypto` | sign/encrypt/hash patterns | Cryptographic operations |
-| `websocket` | WebSocket patterns | WS connection code |
-| `parser` | yaml/parser patterns | Data parsing |
-| `i18n` | i18n/translate patterns | Internationalization |
-| `polyfill` | core-js/ToPrimitive patterns | ES polyfills |
-| `filesystem` | fs/readFile patterns | File operations |
-| `timer` | setTimeout/setInterval | Timer callbacks |
-| `construct` | factory/construct desc | Factory functions |
-| `delegate` | pass-through/returns arg | Forwarding functions |
-| `boilerplate` | __esModule/defineProperty | Webpack boilerplate |
-| `callback` | `_S_return_*` names | Extracted callbacks |
-| `branch` | `_S_*_if/_else/_try/_catch` | Extracted branches |
-| `other` | None of the above | Uncategorized |
+| `framework` | `FRAMEWORK_PATTERNS` | Vue/React/Regenerator internals |
+| `network` | `CATEGORY_RULES` | fetch/xhr/axios patterns |
+| `crypto` | `CATEGORY_RULES` | sign/encrypt/hash patterns |
+| `websocket` | `CATEGORY_RULES` | WebSocket patterns |
+| `parser` | `CATEGORY_RULES` | yaml/parser patterns |
+| `i18n` | `CATEGORY_RULES` | i18n/translate patterns |
+| `polyfill` | `CATEGORY_RULES` | core-js/ToPrimitive patterns |
+| `filesystem` | `CATEGORY_RULES` | fs/readFile patterns |
+| `boilerplate` | `CATEGORY_RULES` | __esModule/defineProperty |
+| `timer` | Behavioral desc | setTimeout/setInterval |
+| `construct` | Behavioral desc | factory/construct |
+| `delegate` | Behavioral desc | pass-through/returns arg |
+| `callback` | Name pattern | `_S_return_*` |
+| `branch` | Name pattern | `_S_*_if/_else/_try/_catch` |
+| `other` | Fallback | Uncategorized |
 
 ## Domain Classification
 
-`classifyDomain` in structure/analyze.js detects:
+`classifyDomain` in structure/analyze.js uses `DOMAIN_RULES` from constants.js. Each rule is `{ tag, regex, exclusive?, extra?, exclude?, minCount? }`.
 
-| Domain | Patterns |
-|--------|----------|
-| rspack/webpack chunk | `self.webpackChunk` |
-| webpack bundle | `__webpack_require__` |
-| turbopack runtime | `TURBOPACK` |
-| CommonJS | `module.exports` + `require()` |
-| AMD | `define(` |
-| Vue | `__VUE__`, `vue.*reactive` |
-| React | `__REACT_DEVTOOLS_GLOBAL_HOOK__` |
-| Angular | `__ANGULAR__`, `@NgModule` |
-| Svelte | `__svelte` |
-| Next.js | `__NEXT_DATA__` |
-| Nuxt | `__nuxt` |
-| Node.js | `process.` (non-env) |
-| DOM manipulation | innerHTML/createElement/querySelector |
-| Event-driven | addEventListener (>3 occurrences) |
-| Network | fetch+URL or axios |
-| Crypto | sign/encrypt/hash |
-| Signing | sign/xhsSign patterns |
-| API Router | >5 `/api/` paths |
-| Protobuf | protobufjs/.encode() (excluding TextEncoder) |
-| WebSocket | websocket/socket.io |
-| Graphics | WebGL/getContext("2d") |
-| Prototype-patched | `prototype.x = ` |
-| Polyfill/Core-JS | ToPrimitive/OrdinaryToPrimitive |
-| Eval-heavy | >5 eval() calls |
+Simple rules are applied via a loop. Compound rules (Network, API Router, Eval-heavy) have special logic.
+
+### Adding a New Domain Rule
+
+In `constants.js`, add to `DOMAIN_RULES`:
+
+```js
+{ tag: "MyDomain", regex: /\bmyPattern\b/ },
+```
+
+Modifiers:
+- `exclusive: true` — skip if another rule already matched (e.g., webpack chunk vs bundle)
+- `extra: /regex/` — only match if this additional regex also matches (e.g., CommonJS needs `require()`)
+- `exclude: /regex/` — skip if this regex matches (e.g., Protobuf excludes TextEncoder)
+- `minCount: N` — only match if regex matches more than N times (e.g., Event-driven needs >3)
+
+### Adding a New Function Category Rule
+
+In `constants.js`, add to `CATEGORY_RULES`:
+
+```js
+{ category: "mycategory", regex: /\b(keyword1|keyword2)\b/i },
+```
+
+For framework-specific detection, add to `FRAMEWORK_PATTERNS`:
+
+```js
+/\b(MyFramework\b.*\binternal|__MY_FRAMEWORK__)\b/,
+```
 
 ## Adding a New Pass — Complete Example
 
@@ -507,20 +511,6 @@ deob -c test.config.js
 ```bash
 git add -A && git commit -m "feat: inlineConstObjects — replace obj.prop with literal value"
 ```
-
-## Adding a New Domain Classification
-
-In `structure/analyze.js`, `classifyDomain`:
-
-```js
-// Add BEFORE generic checks (framework before "Browser DOM")
-if (/\bmyFramework\b/.test(src)) tags.push("MyFramework");
-```
-
-Rules:
-- Place specific checks before generic ones
-- Use multiple patterns for reliability
-- Test against multiple sites to avoid overfitting
 
 ## Debugging
 
