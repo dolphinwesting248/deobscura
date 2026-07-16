@@ -3,6 +3,27 @@ const { fs, path } = require("../config");
 const { OUTPUT_FILES } = require("../constants");
 const { analyzeStructure, computeDensity, classifyDomain, generateTLDR } = require("./analyze");
 
+// ── Context Window ─────────────────────────────────────────────────
+
+const CONTEXT_MAX_CHARS = 200;
+
+function computeContextWindow(code, startLine, endLine) {
+  if (!code || !startLine || !endLine) return null;
+  const lines = code.split("\n");
+  const fnLines = lines.slice(startLine - 1, endLine);
+  if (fnLines.length === 0) return null;
+  const text = fnLines.join("\n");
+  if (text.length <= CONTEXT_MAX_CHARS) return text;
+  // Truncate at line boundary
+  let result = "";
+  for (const line of fnLines) {
+    const next = result ? result + "\n" + line : line;
+    if (next.length > CONTEXT_MAX_CHARS) break;
+    result = next;
+  }
+  return result ? result + " ..." : fnLines[0].slice(0, CONTEXT_MAX_CHARS) + " ...";
+}
+
 // ── Reading Guide ──────────────────────────────────────────────────
 
 function generateReadingGuide(report) {
@@ -210,6 +231,9 @@ function generatePromptFile(outputDir) {
   // Pass-through count
   const passThrough = functions.filter((f) => (f.description || "").includes("pass-through")).length;
 
+  // Read main.js for context window snippets
+  const mainCode = fs.existsSync(mainPath) ? fs.readFileSync(mainPath, "utf-8") : "";
+
   const zeroFnWarning = summary.totalFunctions === 0 ? `\n> **WARNING**: 0 functions extracted. This file may be data-only, heavily obfuscated (control-flow flattening / VM-based), or non-JS content. The analysis below is empty — consider manual inspection.\n` : "";
 
   // Webpack chunk detection
@@ -248,7 +272,9 @@ ${scored.map((f, i) => {
     if ((f.suspicious || []).length > 0) why.push("suspicious");
     if (f.complexity > 5) why.push("cc=" + f.complexity);
     const tags = f.semanticTags || [];
-    return `${i + 1}. \`${f.name}\` [${why.join(", ") || "core"}] — ${(f.description || "").replace(/[[\]]/g, "")}${tags.length > 0 ? " [" + tags.join(", ") + "]" : ""}`;
+    const snippet = computeContextWindow(mainCode, f.lines[0], f.lines[1]);
+    const snippetBlock = snippet ? `\n\`\`\`\n${snippet}\n\`\`\`` : "";
+    return `${i + 1}. \`${f.name}\` [${why.join(", ") || "core"}] — ${(f.description || "").replace(/[[\]]/g, "")}${tags.length > 0 ? " [" + tags.join(", ") + "]" : ""}${snippetBlock}`;
   }).join("\n")}
 
 ## Skip
