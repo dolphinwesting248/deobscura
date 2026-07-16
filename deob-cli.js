@@ -47,7 +47,7 @@ function processOneFile(file, outDir, opts) {
 
   const reports = [];
   if (opts.metrics) runMetrics(file, outDir);
-  if (opts.md) { reports.push(runStructure(file, outDir, { brief: true, denoise: opts.denoise })); generatePromptFile(outDir); }
+  if (opts.md) { reports.push(runStructure(file, outDir, { brief: !!opts.dirMode, denoise: opts.denoise })); generatePromptFile(outDir); }
   if (opts.index) generateIndex(outDir, { denoise: opts.denoise, dirMode: opts.dirMode });
   return reports;
 }
