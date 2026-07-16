@@ -1,5 +1,6 @@
 // Core analysis functions for structure report
-const { parser, t, fs, path, ALERT_PATTERNS } = require("../config");
+const { parser, t, fs, path } = require("../config");
+const { ALERT_PATTERNS } = require("../constants");
 const { DEFAULT_PARSER_OPTS, JSX_PARSER_OPTS, SUB_FN_PREFIX, SUB_FN_NAME_RE, isSubFn, SKIP_KEYS, THRESHOLDS, CATEGORIES, SEVERITY, NAMING_FORMAT, NAMING_COLLISION, NAMING_EXAMPLES, NAMING_HINTS } = require("../constants");
 
 // Simple cache: avoid re-parsing the same file in a single run

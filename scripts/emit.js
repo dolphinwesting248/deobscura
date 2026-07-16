@@ -1,4 +1,5 @@
-const { t, RESERVED } = require("./config");
+const { t } = require("./config");
+const { RESERVED } = require("./constants");
 const { containsAwait, containsYield, containsForAwait } = require("./ast-utils");
 
 // ---- Line-range comment on extracted sub-functions ----

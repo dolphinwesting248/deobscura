@@ -1,4 +1,5 @@
-const { t, GLOBALS } = require("./config");
+const { t } = require("./config");
+const { GLOBALS } = require("./constants");
 
 // Collect all names defined in a set of statements (var/let/const/function/params/catch/destructuring)
 function collectDefined(stmts) {

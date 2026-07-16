@@ -1,6 +1,7 @@
 // Declaration and annotation passes
 
-const { t, ALERT_PATTERNS, RESERVED } = require("../config");
+const { t } = require("../config");
+const { ALERT_PATTERNS, RESERVED } = require("../constants");
 const { SKIP_KEYS, isSubFn } = require("../constants");
 
 // ---- hoistDeclarations: move var/let/const/function to top of every scope ----
