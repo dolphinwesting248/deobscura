@@ -1,9 +1,8 @@
 // Benchmark runner: compare LLM analysis with vs without deob
-// Runs deob on each obfuscated scenario, then evaluates analysis quality
+// Phase 1: Run deob → Phase 2: Spawn 2 agents → Phase 3: Score against ground truth
 
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
 
 const scenarios = ["A", "B", "C", "D", "E"];
 const scenarioLabels = {
@@ -16,7 +15,146 @@ const basePath = path.join(__dirname, "scenarios");
 const resultsDir = path.join(__dirname, "results");
 if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true });
 
-// — Phase 1: Run deob on all scenarios —
+// ── Analysis Questions (same for both agents) ──
+
+const QUESTIONS = {
+  description: "What is the primary function of this code? (1 sentence)",
+  functions: "List all functions with their purpose and what they call",
+  apiEndpoints: "List all API endpoints (method, path, purpose)",
+  securityIssues: "List all security issues (severity, issue, location)",
+  dataFlow: "Describe the data flow from input to output",
+  keyVariables: "List key variables/constants and their values",
+  entryPoint: "What is the entry point of this code?",
+};
+
+// ── Scoring functions ──
+
+function jaccard(a, b) {
+  const sa = new Set(a.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+  const sb = new Set(b.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+  const intersection = new Set([...sa].filter(x => sb.has(x)));
+  const union = new Set([...sa, ...sb]);
+  return union.size === 0 ? 0 : intersection.size / union.size;
+}
+
+function scoreFunctions(answer, gt) {
+  if (!gt || !gt.functions || gt.functions.length === 0) return { score: 1, detail: "N/A" };
+  const answerText = answer.functions || JSON.stringify(answer);
+  let matched = 0;
+  for (const fn of gt.functions) {
+    // Check if function purpose is mentioned in answer
+    const keywords = fn.purpose.split(/\W+/).filter(w => w.length > 3).slice(0, 3).join(" ");
+    if (answerText.toLowerCase().includes(keywords.toLowerCase())) matched++;
+    else if (fn.security && fn.security.length > 0) {
+      // Check security-related keywords
+      const secKw = fn.security[0].split(/\W+/).filter(w => w.length > 3).slice(0, 2).join(" ");
+      if (answerText.toLowerCase().includes(secKw.toLowerCase())) matched++;
+    }
+  }
+  const recall = matched / gt.functions.length;
+  const precision = Math.min(1, matched / Math.max(1, (answerText.match(/function[:\s]/g) || []).length));
+  const f1 = recall + precision === 0 ? 0 : 2 * recall * precision / (recall + precision);
+  return { score: f1, detail: `${matched}/${gt.functions.length}` };
+}
+
+function scoreApiEndpoints(answer, gt) {
+  if (!gt || !gt.apiEndpoints || gt.apiEndpoints.length === 0) return { score: 1, detail: "N/A" };
+  const answerText = answer.apiEndpoints || JSON.stringify(answer);
+  let matched = 0;
+  for (const ep of gt.apiEndpoints) {
+    const pathParts = ep.path.split("/").filter(Boolean);
+    const allFound = pathParts.every(p => answerText.includes(p));
+    if (allFound) matched++;
+  }
+  return { score: matched / gt.apiEndpoints.length, detail: `${matched}/${gt.apiEndpoints.length}` };
+}
+
+function scoreSecurityIssues(answer, gt) {
+  if (!gt || !gt.securityIssues || gt.securityIssues.length === 0) return { score: 1, detail: "N/A" };
+  const answerText = answer.securityIssues || JSON.stringify(answer);
+  let matched = 0;
+  for (const si of gt.securityIssues) {
+    const keywords = si.issue.split(/\W+/).filter(w => w.length > 3).slice(0, 3).join(" ");
+    if (answerText.toLowerCase().includes(keywords.toLowerCase())) matched++;
+  }
+  return { score: matched / gt.securityIssues.length, detail: `${matched}/${gt.securityIssues.length}` };
+}
+
+function scoreDataFlow(answer, gt) {
+  if (!gt || !gt.dataFlow || gt.dataFlow.length === 0) return { score: 1, detail: "N/A" };
+  const answerText = answer.dataFlow || JSON.stringify(answer);
+  let totalSim = 0;
+  for (const flow of gt.dataFlow) {
+    totalSim += jaccard(flow, answerText);
+  }
+  return { score: totalSim / gt.dataFlow.length, detail: "" };
+}
+
+function scoreKeyVariables(answer, gt) {
+  if (!gt || !gt.keyVariables || Object.keys(gt.keyVariables).length === 0) return { score: 1, detail: "N/A" };
+  const answerText = answer.keyVariables || JSON.stringify(answer);
+  const entries = Object.entries(gt.keyVariables);
+  let matched = 0;
+  for (const [name, value] of entries) {
+    if (answerText.includes(name) || answerText.includes(value)) matched++;
+  }
+  return { score: matched / entries.length, detail: `${matched}/${entries.length}` };
+}
+
+// ── Generate agent prompts ──
+
+function generateDeobAgentPrompt(scenario, outputDir) {
+  return `You are a JavaScript reverse engineer. Analyze deobfuscated code from the file system.
+
+The original obfuscated JS has been preprocessed by deob. Read the following files in order:
+
+1. Read: ${outputDir}/0-prompt.md  (architecture overview, alerts, top functions)
+2. Read: ${outputDir}/2-index.txt  (function catalog with call info, closures, shared vars)
+3. Read: ${outputDir}/1-structure.md  (call graph, alert traces, hotspots)
+4. Read: ${outputDir}/main.js  (deobfuscated code — focus on functions with banner comments)
+
+Answer these questions in JSON format:
+{
+  "description": "One sentence describing the primary function of this code",
+  "functions": "List each function with its name, purpose, and what functions it calls",
+  "apiEndpoints": "List each API endpoint: method, path, purpose",
+  "securityIssues": "List each security issue: severity (critical/high/medium/low), issue description, location",
+  "dataFlow": "Describe the data flow from input to output as steps",
+  "keyVariables": "List important variables/constants and their values",
+  "entryPoint": "Name of the entry point function"
+}
+
+Return ONLY the JSON object, no other text.`;
+}
+
+function generateRawAgentPrompt(scenario, obfuscatedFile) {
+  return `You are a JavaScript reverse engineer. Analyze obfuscated JavaScript code.
+
+The code is obfuscated with: variable renaming, string encoding, control flow flattening,
+dead code injection, and self-defending techniques.
+
+Read the obfuscated file: ${obfuscatedFile}
+
+First, try to understand the structure:
+- Find the string decoding function (look for a function called early that returns array elements)
+- Identify entry points (look for immediate function calls at the end)
+- Trace the control flow by following function calls
+
+Answer these questions in JSON format:
+{
+  "description": "One sentence describing the primary function of this code",
+  "functions": "List each function with its name (if you can identify it), purpose, and what functions it calls",
+  "apiEndpoints": "List each API endpoint: method, path, purpose",
+  "securityIssues": "List each security issue: severity (critical/high/medium/low), issue description, location",
+  "dataFlow": "Describe the data flow from input to output as steps",
+  "keyVariables": "List important variables/constants and their values",
+  "entryPoint": "Name of the entry point function (if identifiable)"
+}
+
+Return ONLY the JSON object, no other text.`;
+}
+
+// ── Phase 1: Run deob on all scenarios ──
 
 console.log("=".repeat(60));
 console.log("Phase 1: Running deob on all scenarios\n");
@@ -27,18 +165,12 @@ for (const sc of scenarios) {
   const inputFile = path.join(basePath, sc, "obfuscated.js");
   const outputDir = path.join(resultsDir, `scenario_${sc}_deob`);
 
-  if (!fs.existsSync(inputFile)) {
-    console.log(`  SKIP ${sc}: obfuscated.js not found`);
-    continue;
-  }
-
-  console.log(`Running deob on scenario ${sc} (${scenarioLabels[sc]})...`);
+  console.log(`Running deob on scenario ${sc}...`);
 
   try {
     const main = require("../scripts/pipeline").main;
-    const report = main({ input: inputFile, output: outputDir });
+    main({ input: inputFile, output: outputDir });
 
-    // Generate analysis files
     const { runStructure, generateIndex, generatePromptFile, clearAnalysisCache } = require("../scripts/structure");
     if (clearAnalysisCache) clearAnalysisCache();
     runStructure(inputFile, outputDir, { brief: false, denoise: [] });
@@ -54,37 +186,42 @@ for (const sc of scenarios) {
       deobSize: (mainSize / 1024).toFixed(1),
       ratio: ((mainSize / obfuscatedSize) * 100).toFixed(0)
     };
-
-    console.log(`  Output: ${deobStats[sc].deobSize} KB (${deobStats[sc].ratio}% of ${deobStats[sc].obfuscatedSize} KB obfuscated)`);
+    console.log(`  OK: ${deobStats[sc].deobSize} KB (${deobStats[sc].ratio}%)`);
   } catch (e) {
     console.log(`  ERROR: ${e.message.split("\n")[0]}`);
     deobStats[sc] = { error: e.message };
   }
 }
 
-// — Phase 2: Evaluate deob output quality —
+// ── Phase 2: Generate agent prompts for each scenario ──
 
 console.log("\n" + "=".repeat(60));
-console.log("Phase 2: Evaluating deob output quality\n");
+console.log("Phase 2: Generating agent prompts\n");
 
-function countFunctions(mainJs) {
-  return (mainJs.match(/function\s+_S_/g) || []).length;
+const agentPrompts = {};
+
+for (const sc of scenarios) {
+  const inputFile = path.join(basePath, sc, "obfuscated.js");
+  const outputDir = path.join(resultsDir, `scenario_${sc}_deob`);
+
+  const deobPrompt = generateDeobAgentPrompt(sc, outputDir);
+  const rawPrompt = generateRawAgentPrompt(sc, inputFile);
+
+  agentPrompts[sc] = { deob: deobPrompt, raw: rawPrompt };
+
+  // Write prompts to files for agents to read
+  fs.writeFileSync(path.join(resultsDir, `scenario_${sc}_deob_agent_prompt.txt`), deobPrompt, "utf-8");
+  fs.writeFileSync(path.join(resultsDir, `scenario_${sc}_raw_agent_prompt.txt`), rawPrompt, "utf-8");
+
+  console.log(`  ${sc}: deob prompt = ${deobPrompt.length} chars, raw prompt = ${rawPrompt.length} chars`);
 }
 
-function countBanners(mainJs) {
-  return (mainJs.match(/^\/\/ _S_.+cc=/gm) || []).length;
-}
+// ── Phase 3: Generate scoring summary ──
 
-function countAlerts(prompt) {
-  const match = prompt.match(/## Alerts \((\d+) significant\)/);
-  return match ? parseInt(match[1]) : 0;
-}
+console.log("\n" + "=".repeat(60));
+console.log("Phase 3: Generate report\n");
 
-function countShared(index) {
-  const section = index.split("## shared\n")[1] || "";
-  return section.split("\n## ")[0].split("\n").filter(l => l.startsWith("_")).length;
-}
-
+// Collect deob output quality metrics
 const deobQuality = {};
 
 for (const sc of scenarios) {
@@ -101,112 +238,82 @@ for (const sc of scenarios) {
 
   deobQuality[sc] = {
     mainLines: mainJs.split("\n").length,
-    subFunctions: countFunctions(mainJs),
-    banners: countBanners(mainJs),
-    alerts: countAlerts(prompt),
-    sharedVars: countShared(index),
-    hasLegend: index.includes("## Sections") || index.includes("See ../summary.md"),
+    subFunctions: (mainJs.match(/function\s+_S_/g) || []).length,
+    banners: (mainJs.match(/^\/\/ _S_.+cc=/gm) || []).length,
+    alerts: (prompt.match(/## Alerts \((\d+) significant\)/) || [])[1] || "0",
+    sharedVars: (index.split("## shared\n")[1] || "").split("\n## ")[0].split("\n").filter(l => l.startsWith("_")).length,
     domain: (prompt.match(/Domain: \*\*(.+?)\*\*/) || [])[1] || "N/A",
-    entryPoint: (prompt.match(/Entry point.*?`(.+?)`/) || [])[1] || "N/A"
+    entryPoint: (prompt.match(/Entry point.*?\`(.+?)\`/) || [])[1] || "N/A",
+    closureCount: (prompt.match(/Closure captures: (\d+)/) || [])[1] || "0",
   };
-
-  console.log(`${sc}: ${deobQuality[sc].subFunctions} sub-functions, ${deobQuality[sc].banners} banners, ${deobQuality[sc].alerts} alerts, ${deobQuality[sc].sharedVars} shared vars`);
-  console.log(`    Domain: ${deobQuality[sc].domain}, Entry: ${deobQuality[sc].entryPoint}`);
 }
 
-// — Phase 3: Cross-reference with ground truth —
-
-console.log("\n" + "=".repeat(60));
-console.log("Phase 3: Ground truth validation\n");
-
-const formatHeader = "| Scenario | Functions | Banners | Alerts | Shared | Domain |";
-const formatSep = "|----------|-----------|---------|--------|--------|--------|";
-
-console.log(formatHeader);
-console.log(formatSep);
-
-for (const sc of scenarios) {
-  const gtFile = path.join(basePath, sc, "ground-truth.json");
-  const quality = deobQuality[sc] || {};
-  let gt = { functions: [], securityIssues: [], apiEndpoints: [], keyVariables: {} };
-
-  if (fs.existsSync(gtFile)) {
-    try { gt = JSON.parse(fs.readFileSync(gtFile, "utf-8")); } catch (e) {}
-  }
-
-  const fnCount = gt.functions ? gt.functions.length : 0;
-  const alerts = quality.alerts || 0;
-  const shared = quality.sharedVars || 0;
-  const domain = quality.domain || "N/A";
-
-  console.log(`| ${sc} (${scenarioDiffs[sc]}) | ${quality.subFunctions || 0}/${fnCount} | ${quality.banners || 0} | ${alerts} | ${shared} | ${domain} |`);
-}
-
-// — Phase 4: Generate summary report —
+// ── Phase 4: Write scoring template for manual/automated scoring ──
 
 const report = [];
 report.push("# deob Benchmark Report");
 report.push("");
-report.push(`Generated: ${new Date().toISOString().slice(0, 10)}`);
+report.push("## How to Run the Agents");
+report.push("");
+report.push("For each scenario, spawn TWO agents with the same analysis goals:");
+report.push("");
+report.push("**Agent A (deob):** Read the deob\_agent\_prompt.txt from the results directory.");
+report.push("**Agent B (raw):** Read the raw\_agent\_prompt.txt from the results directory.");
+report.push("");
+report.push("Both agents should output a JSON object. Compare against ground-truth.json in each scenario folder.");
 report.push("");
 report.push("## Obfuscation Levels");
 report.push("");
-report.push("| Scenario | Description | Obfuscation Techniques | Obfuscated Size | Deob Size | Ratio |");
-report.push("|----------|-------------|----------------------|-----------------|-----------|-------|");
-
+report.push("| Scenario | Description | Obfuscated Size | Deob Size | Ratio |");
+report.push("|----------|-------------|-----------------|-----------|-------|");
 for (const sc of scenarios) {
-  const label = scenarioLabels[sc];
   const stats = deobStats[sc] || {};
-  const techniques = {
-    A: "renameGlobals, stringArray (base64), rotateStringArray",
-    B: "controlFlowFlattening (75%), deadCode (30%), stringArray (rc4), selfDefending, numbersToExpressions, splitStrings",
-    C: "controlFlowFlattening (50%), deadCode (20%), stringArray (base64), debugProtection, splitStrings, transformObjectKeys, numbersToExpressions",
-    D: "ALL at 100%: stringArray (rc4), selfDefending, deadCode, controlFlowFlattening, debugProtection, numbersToExpressions, splitStrings, transformObjectKeys, unicodeEscape  (webpack bundle)",
-    E: "ALL at MAX: renameProperties, stringArray (rc4), selfDefending, deadCode (40%), controlFlowFlattening (75%), debugProtection, numbersToExpressions, splitStrings (3 char), transformObjectKeys, unicodeEscape, disableConsoleOutput"
-  };
-
-  if (stats.error) {
-    report.push(`| ${sc} (${label}) | ${scenarioDiffs[sc]} | ERROR: ${stats.error.split("\n")[0]} |`);
-  } else {
-    report.push(`| ${sc} (${label}) | ${scenarioDiffs[sc]} | ${techniques[sc]} | ${stats.obfuscatedSize} KB | ${stats.deobSize} KB | ${stats.ratio}% |`);
-  }
+  if (stats.error) report.push(`| ${sc} | ${scenarioLabels[sc]} | ERROR | - | - |`);
+  else report.push(`| ${sc} | ${scenarioLabels[sc]} | ${stats.obfuscatedSize} KB | ${stats.deobSize} KB | ${stats.ratio}% |`);
 }
 
 report.push("");
-report.push("## Deob Output Quality");
+report.push("## Scoring Rubric");
 report.push("");
-report.push("| Scenario | Main.js Lines | Sub-Fns | Banners | Alerts | Shared Vars | Domain | Entry |");
-report.push("|----------|--------------|---------|---------|--------|-------------|--------|-------|");
-
-for (const sc of scenarios) {
-  const q = deobQuality[sc] || {};
-  report.push(`| ${sc} | ${q.mainLines || "N/A"} | ${q.subFunctions || 0} | ${q.banners || 0} | ${q.alerts || 0} | ${q.sharedVars || 0} | ${q.domain || "N/A"} | ${q.entryPoint || "N/A"} |`);
-}
+report.push("| Category | Weight | Method |");
+report.push("|----------|--------|--------|");
+report.push("| Functions identified | 25% | Keyword match between answer and GT purpose |");
+report.push("| API endpoints | 20% | Path component match |");
+report.push("| Security issues | 25% | Keyword match between answer and GT issues |");
+report.push("| Data flow | 15% | Jaccard similarity on keywords |");
+report.push("| Key variables | 15% | Name/value match |");
 
 report.push("");
-report.push("## Ground Truth Comparison");
+report.push("## Scoring Template");
 report.push("");
-report.push("| Scenario | Difficulty | GT Functions | Deob Functions | Match Rate | Domain Accuracy |");
-report.push("|----------|-----------|--------------|----------------|------------|-----------------|");
-
+report.push("Copy this table and fill in scores after running agents:");
+report.push("");
+report.push("| Scenario | Agent | Functions (/25) | API (/20) | Security (/25) | DataFlow (/15) | Vars (/15) | **Total** | Time |");
+report.push("|----------|-------|----------------|-----------|----------------|---------------|-----------|----------|------|");
 for (const sc of scenarios) {
   const gtFile = path.join(basePath, sc, "ground-truth.json");
-  let gtFnCount = 0;
-  let gtDomain = "";
-  if (fs.existsSync(gtFile)) {
-    try {
-      const gt = JSON.parse(fs.readFileSync(gtFile, "utf-8"));
-      gtFnCount = (gt.functions || []).length;
-      gtDomain = gt.description || "";
-    } catch (e) {}
-  }
-
-  const q = deobQuality[sc] || {};
-  const matchRate = gtFnCount > 0 ? ((q.subFunctions || 0) / gtFnCount * 100).toFixed(0) + "%" : "N/A";
-
-  report.push(`| ${sc} | ${scenarioDiffs[sc]} | ${gtFnCount} | ${q.subFunctions || 0} | ${matchRate} | ${q.domain || "N/A"} |`);
+  let gt = null;
+  try { gt = JSON.parse(fs.readFileSync(gtFile, "utf-8")); } catch (e) {}
+  const gtFns = gt ? gt.functions.length : "?";
+  const gtEp = gt ? (gt.apiEndpoints || []).length : "?";
+  const gtSec = gt ? (gt.securityIssues || []).length : "?";
+  report.push(`| ${sc} | **deob** | /25 (${gtFns} GT) | /20 (${gtEp} GT) | /25 (${gtSec} GT) | /15 | /15 |   /100 | s |`);
+  report.push(`| ${sc} | **raw** | /25 | /20 | /25 | /15 | /15 |   /100 | s |`);
 }
 
 const reportPath = path.join(resultsDir, "benchmark-report.md");
 fs.writeFileSync(reportPath, report.join("\n"), "utf-8");
-console.log("\n\nReport written to: " + reportPath);
+console.log("Report written to: " + reportPath);
+
+// ── Print summary for user ──
+console.log("\n" + "=".repeat(60));
+console.log("Summary: Agent Prompts Ready\n");
+console.log("To run the benchmark:");
+console.log("1. Read the prompt files in benchmark/results/");
+console.log("2. For each scenario, spawn Agent A (deob) and Agent B (raw)");
+console.log("3. Collect their JSON responses");
+console.log("4. Compare against ground-truth.json in each scenario folder");
+console.log("5. Fill in the scoring template in benchmark-report.md");
+console.log("\nPrompt files generated:");
+console.log("  benchmark/results/scenario_*_deob_agent_prompt.txt");
+console.log("  benchmark/results/scenario_*_raw_agent_prompt.txt");

@@ -1,33 +1,47 @@
 # deob Benchmark Report
 
-Generated: 2026-07-16
+## How to Run the Agents
+
+For each scenario, spawn TWO agents with the same analysis goals:
+
+**Agent A (deob):** Read the deob_agent_prompt.txt from the results directory.
+**Agent B (raw):** Read the raw_agent_prompt.txt from the results directory.
+
+Both agents should output a JSON object. Compare against ground-truth.json in each scenario folder.
 
 ## Obfuscation Levels
 
-| Scenario | Description | Obfuscation Techniques | Obfuscated Size | Deob Size | Ratio |
-|----------|-------------|----------------------|-----------------|-----------|-------|
-| A (API Client) | easy | renameGlobals, stringArray (base64), rotateStringArray | 4.5 KB | 6.4 KB | 140% |
-| B (Auth Flow) | medium | controlFlowFlattening (75%), deadCode (30%), stringArray (rc4), selfDefending, numbersToExpressions, splitStrings | 14.0 KB | 19.0 KB | 135% |
-| C (Data Pipeline) | medium | controlFlowFlattening (50%), deadCode (20%), stringArray (base64), debugProtection, splitStrings, transformObjectKeys, numbersToExpressions | 10.3 KB | 14.6 KB | 141% |
-| D (Webpack Bundle) | hard | ALL at 100%: stringArray (rc4), selfDefending, deadCode, controlFlowFlattening, debugProtection, numbersToExpressions, splitStrings, transformObjectKeys, unicodeEscape  (webpack bundle) | 42.0 KB | 35.1 KB | 84% |
-| E (Payment Processing) | hard | ALL at MAX: renameProperties, stringArray (rc4), selfDefending, deadCode (40%), controlFlowFlattening (75%), debugProtection, numbersToExpressions, splitStrings (3 char), transformObjectKeys, unicodeEscape, disableConsoleOutput | 63.0 KB | 53.8 KB | 85% |
+| Scenario | Description | Obfuscated Size | Deob Size | Ratio |
+|----------|-------------|-----------------|-----------|-------|
+| A | API Client | 4.5 KB | 6.4 KB | 140% |
+| B | Auth Flow | 14.0 KB | 19.0 KB | 135% |
+| C | Data Pipeline | 10.3 KB | 14.6 KB | 141% |
+| D | Webpack Bundle | 42.0 KB | 35.1 KB | 84% |
+| E | Payment Processing | 63.0 KB | 53.8 KB | 85% |
 
-## Deob Output Quality
+## Scoring Rubric
 
-| Scenario | Main.js Lines | Sub-Fns | Banners | Alerts | Shared Vars | Domain | Entry |
-|----------|--------------|---------|---------|--------|-------------|--------|-------|
-| A | 144 | 5 | 5 | 3 | 10 | Network | _0x_0x11ac |
-| B | 409 | 20 | 20 | 1 | 20 | General JS | _0x_0x18478c |
-| C | 310 | 17 | 17 | 0 | 20 | General JS | _0x_0x5d7c |
-| D | 595 | 30 | 30 | 0 | 19 | General JS | _0x_0x505e |
-| E | 938 | 44 | 44 | 0 | 19 | General JS | _0x_0x4177 |
+| Category | Weight | Method |
+|----------|--------|--------|
+| Functions identified | 25% | Keyword match between answer and GT purpose |
+| API endpoints | 20% | Path component match |
+| Security issues | 25% | Keyword match between answer and GT issues |
+| Data flow | 15% | Jaccard similarity on keywords |
+| Key variables | 15% | Name/value match |
 
-## Ground Truth Comparison
+## Scoring Template
 
-| Scenario | Difficulty | GT Functions | Deob Functions | Match Rate | Domain Accuracy |
-|----------|-----------|--------------|----------------|------------|-----------------|
-| A | easy | 6 | 5 | 83% | Network |
-| B | medium | 10 | 20 | 200% | General JS |
-| C | medium | 5 | 17 | 340% | General JS |
-| D | hard | 5 | 30 | 600% | General JS |
-| E | hard | 4 | 44 | 1100% | General JS |
+Copy this table and fill in scores after running agents:
+
+| Scenario | Agent | Functions (/25) | API (/20) | Security (/25) | DataFlow (/15) | Vars (/15) | **Total** | Time |
+|----------|-------|----------------|-----------|----------------|---------------|-----------|----------|------|
+| A | **deob** | /25 (6 GT) | /20 (3 GT) | /25 (3 GT) | /15 | /15 |   /100 | s |
+| A | **raw** | /25 | /20 | /25 | /15 | /15 |   /100 | s |
+| B | **deob** | /25 (10 GT) | /20 (0 GT) | /25 (3 GT) | /15 | /15 |   /100 | s |
+| B | **raw** | /25 | /20 | /25 | /15 | /15 |   /100 | s |
+| C | **deob** | /25 (5 GT) | /20 (0 GT) | /25 (0 GT) | /15 | /15 |   /100 | s |
+| C | **raw** | /25 | /20 | /25 | /15 | /15 |   /100 | s |
+| D | **deob** | /25 (5 GT) | /20 (1 GT) | /25 (2 GT) | /15 | /15 |   /100 | s |
+| D | **raw** | /25 | /20 | /25 | /15 | /15 |   /100 | s |
+| E | **deob** | /25 (4 GT) | /20 (1 GT) | /25 (4 GT) | /15 | /15 |   /100 | s |
+| E | **raw** | /25 | /20 | /25 | /15 | /15 |   /100 | s |

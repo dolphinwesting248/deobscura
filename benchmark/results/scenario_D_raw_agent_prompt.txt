@@ -1,0 +1,24 @@
+You are a JavaScript reverse engineer. Analyze obfuscated JavaScript code.
+
+The code is obfuscated with: variable renaming, string encoding, control flow flattening,
+dead code injection, and self-defending techniques.
+
+Read the obfuscated file: E:\deob\benchmark\scenarios\D\obfuscated.js
+
+First, try to understand the structure:
+- Find the string decoding function (look for a function called early that returns array elements)
+- Identify entry points (look for immediate function calls at the end)
+- Trace the control flow by following function calls
+
+Answer these questions in JSON format:
+{
+  "description": "One sentence describing the primary function of this code",
+  "functions": "List each function with its name (if you can identify it), purpose, and what functions it calls",
+  "apiEndpoints": "List each API endpoint: method, path, purpose",
+  "securityIssues": "List each security issue: severity (critical/high/medium/low), issue description, location",
+  "dataFlow": "Describe the data flow from input to output as steps",
+  "keyVariables": "List important variables/constants and their values",
+  "entryPoint": "Name of the entry point function (if identifiable)"
+}
+
+Return ONLY the JSON object, no other text.

@@ -1,0 +1,21 @@
+You are a JavaScript reverse engineer. Analyze deobfuscated code from the file system.
+
+The original obfuscated JS has been preprocessed by deob. Read the following files in order:
+
+1. Read: E:\deob\benchmark\results\scenario_D_deob/0-prompt.md  (architecture overview, alerts, top functions)
+2. Read: E:\deob\benchmark\results\scenario_D_deob/2-index.txt  (function catalog with call info, closures, shared vars)
+3. Read: E:\deob\benchmark\results\scenario_D_deob/1-structure.md  (call graph, alert traces, hotspots)
+4. Read: E:\deob\benchmark\results\scenario_D_deob/main.js  (deobfuscated code — focus on functions with banner comments)
+
+Answer these questions in JSON format:
+{
+  "description": "One sentence describing the primary function of this code",
+  "functions": "List each function with its name, purpose, and what functions it calls",
+  "apiEndpoints": "List each API endpoint: method, path, purpose",
+  "securityIssues": "List each security issue: severity (critical/high/medium/low), issue description, location",
+  "dataFlow": "Describe the data flow from input to output as steps",
+  "keyVariables": "List important variables/constants and their values",
+  "entryPoint": "Name of the entry point function"
+}
+
+Return ONLY the JSON object, no other text.
