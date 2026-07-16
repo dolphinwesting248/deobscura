@@ -194,10 +194,11 @@ function generatePromptFile(outputDir) {
   const roots = (hotspots.roots || []).filter((f) => f.calls.length > 0)
     .sort((a, b) => (b.calledBy.length + b.calls.length) - (a.calledBy.length + a.calls.length));
 
-  // Top 5 by interest score
+  // Top 5 by interest score (alerts × 3 + complexity + heat + size bonus)
+  const significantAlerts = alerts.filter(a => a.severity !== "info" && a.severity !== "low");
   const scored = functions.map((f) => ({
     ...f,
-    score: (alerts.filter((a) => a.fn === f.name).length * 3) + (f.complexity || 1) + Math.min(f.calledBy.length, 20)
+    score: (significantAlerts.filter((a) => a.fn === f.name).length * 3) + (f.complexity || 1) + Math.min(f.calledBy.length, 20) + Math.min(Math.floor((f.bodyLen || 0) / 50), 10)
   })).sort((a, b) => b.score - a.score).slice(0, 5);
 
   // Pass-through count
@@ -208,10 +209,16 @@ function generatePromptFile(outputDir) {
   // Webpack chunk detection
   const domainStr = domain || "";
   const isWebpackChunk = /webpack|rspack|turbopack/i.test(domainStr);
-  const chunkWarning = isWebpackChunk ? `\n> **NOTE**: This is a webpack/rspack chunk — it likely contains only a subset of the application logic. Other chunks may contain the actual business logic, API calls, and security-relevant code. Check for additional chunk files (e.g., \`0.risk-captcha.js\`, \`vendor.js\`).\n` : "";
+  const chunkWarning = isWebpackChunk ? `\n> **NOTE**: This is a webpack/rspack chunk — it likely contains only a subset of the application logic. Other chunks may contain the actual business logic, API calls, and security-relevant code. Check for additional chunk files.\n` : "";
+
+  // Brief summary: what this file does
+  const significantAlerts = alerts.filter(a => a.severity !== "info" && a.severity !== "low");
+  const alertSummary = significantAlerts.length > 0 ? [...new Set(significantAlerts.map(a => a.label))].join(", ") : "";
+  const contextLine = domain !== "General JS" ? `${domain}` : "";
+  const purposeLine = [contextLine, alertSummary].filter(Boolean).join(" — ");
 
   const content = `You are analyzing deobfuscated JavaScript from \`${file}\`. The preprocessor already determined:
-${zeroFnWarning}${chunkWarning}
+${zeroFnWarning}${chunkWarning}${purposeLine ? `\n> **Context**: ${purposeLine}\n` : ""}
 ## Architecture
 - ${summary.totalFunctions} functions (${summary.originalFunctions} original, ${summary.subFunctions} extracted)
 - Domain: **${domain}**
@@ -220,8 +227,9 @@ ${zeroFnWarning}${chunkWarning}
 ${decoder ? `- **String decoder**: \`${decoder.name}\` (L${decoder.lines[0]}) — self-modifying lookup, called by ${decoder.calledBy.length} functions. Strings are NOT yet decoded — you will see opaque calls like \`_0x13f90f(0x1818)\`.` : ""}
 ${roots.length > 0 ? `- **Entry point**: \`${roots[0].name}\` (L${roots[0].lines[0]}) → ${roots[0].calls.slice(0,5).join(", ")}${roots[0].calls.length > 5 ? " +" + (roots[0].calls.length - 5) : ""}` : ""}
 
-## Alerts (${alerts.length})
-${alerts.length > 0 ? alerts.filter((a, i) => i < 10).map((a) => `- [${a.severity}] **${a.label}** in \`${a.fn}\` L${a.line}: ${(a.matches || []).slice(0, 3).join(", ")}`).join("\n") : "_No security alerts detected._"}
+## Alerts (${alerts.filter(a => a.severity !== "info" && a.severity !== "low").length} significant)
+${alerts.filter(a => a.severity !== "info" && a.severity !== "low").slice(0, 10).map((a) => `- [${a.severity}] **${a.label}** in \`${a.fn}\` L${a.line}: ${(a.matches || []).slice(0, 3).join(", ")}`).join("\n") || "_No significant security alerts detected._"}
+${alerts.filter(a => a.severity === "info" || a.severity === "low").length > 0 ? `\n_${alerts.filter(a => a.severity === "info" || a.severity === "low").length} low/info alerts omitted (denoised)._` : ""}
 
 ## Start Here (top 5 by interest score)
 ${scored.map((f, i) => {
