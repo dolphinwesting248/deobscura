@@ -6,8 +6,6 @@
 
 export * from "./analysis";
 export * from "./ast";
+export * from "./config";
 export * from "./constants";
 export * from "./passes";
-
-// Re-export config types (user-facing)
-export { DenoiseRule, DeobConfig, Severity } from "../config-types";
