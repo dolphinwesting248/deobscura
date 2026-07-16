@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Universal JS deobfuscation — AST-level preprocessing for LLM-assisted reverse engineering",
   "main": "deob.js",
-  "types": "scripts/config-types.d.ts",
+  "types": "scripts/types/index.d.ts",
   "bin": {
     "deob": "./deob.js"
   },
