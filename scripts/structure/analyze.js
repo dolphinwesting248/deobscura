@@ -1,6 +1,17 @@
 // Core analysis functions for structure report
 const { parser, t, fs, path, ALERT_PATTERNS } = require("../config");
 
+// Simple cache: avoid re-parsing the same file in a single run
+const _analysisCache = new Map();
+function cachedAnalyze(filepath, opts) {
+  const key = filepath + JSON.stringify(opts && opts.denoise || null);
+  if (_analysisCache.has(key)) return _analysisCache.get(key);
+  const result = analyzeStructureImpl(filepath, opts);
+  _analysisCache.set(key, result);
+  return result;
+}
+function clearAnalysisCache() { _analysisCache.clear(); }
+
 // ── Quick Lookup Index ──────────────────────────────────────────────
 
 function splitWords(name) {
@@ -212,7 +223,7 @@ function analyzeStructureFallback(filepath, code) {
   return report;
 }
 
-function analyzeStructure(filepath, opts) {
+function analyzeStructureImpl(filepath, opts) {
   const denoise = opts && opts.denoise;
   const code = fs.readFileSync(filepath, "utf-8");
   let ast;
@@ -537,6 +548,7 @@ function analyzeStructure(filepath, opts) {
   report.tldr = generateTLDR(report);
   return report;
 }
+const analyzeStructure = cachedAnalyze;
 
 // ── Jump Table Detection ───────────────────────────────────────────
 

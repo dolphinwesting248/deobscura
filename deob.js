@@ -3,7 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const { main } = require("./scripts/pipeline");
 const { runMetrics } = require("./scripts/metrics");
-const { runStructure, generateCrossSummary, applyTierFilter, generateIndex, generatePromptFile, writeCrossReadme } = require("./scripts/structure");
+const { runStructure, generateCrossSummary, applyTierFilter, generateIndex, generatePromptFile, writeCrossReadme, clearAnalysisCache } = require("./scripts/structure");
 const { DEFAULT_DENOISE } = require("./scripts/config");
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -25,6 +25,7 @@ function collectJsFilesRecursive(dir, baseDir) {
 }
 
 function processOneFile(file, outDir, opts) {
+  if (clearAnalysisCache) clearAnalysisCache();
   if (!opts.quiet) {
     console.log(`\n${"=".repeat(50)}`);
     console.log(`Input:  ${file}`);
