@@ -2,7 +2,7 @@
   "name": "deobscura",
   "version": "1.0.4",
   "description": "Universal JS deobfuscation — AST-level preprocessing for LLM-assisted reverse engineering",
-  "main": "deob.js",
+  "main": "scripts/index.js",
   "types": "scripts/types/index.d.ts",
   "bin": {
     "deob": "./deob-cli.js"
