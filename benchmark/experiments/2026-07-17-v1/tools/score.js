@@ -128,8 +128,8 @@ function scoreScenario(scenario, expDir) {
 }
 
 // Print report
-// Default experiment dir: latest date-based under experiments/
-const expDir = process.env.BENCH_EXP_DIR || path.join(__dirname, "..", "experiments", "2026-07-17-v1");
+// Self-contained experiment: tools/ lives under experiment dir
+const expDir = process.env.BENCH_EXP_DIR || path.join(__dirname, "..");
 const scenarios = process.argv.includes("--all") ? ["A","B","C","D","E"] : process.argv.slice(2).filter(a => a.match(/^[A-E]$/));
 
 if (scenarios.length === 0) {
