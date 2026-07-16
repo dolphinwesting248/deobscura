@@ -253,6 +253,7 @@ ${alerts.filter(a => a.severity !== "info" && a.severity !== "low").slice(0, 10)
 ${alerts.filter(a => a.severity === "info" || a.severity === "low").length > 0 ? `\n_${alerts.filter(a => a.severity === "info" || a.severity === "low").length} low/info alerts omitted (denoised)._` : ""}
 
 ## Start Here (top 5 by interest score)
+_Function: name | Ss/Pp | cc=N → callees ⇐ callers | tags — description_
 ${scored.map((f, i) => {
     const why = [];
     if (alerts.some((a) => a.fn === f.name)) why.push("alerts");
@@ -260,7 +261,11 @@ ${scored.map((f, i) => {
     if ((f.suspicious || []).length > 0) why.push("suspicious");
     if (f.complexity > 5) why.push("cc=" + f.complexity);
     const tags = f.semanticTags || [];
-    return `${i + 1}. \`${f.name}\` [${why.join(", ") || "core"}] — ${(f.description || "").replace(/[[\]]/g, "")}${tags.length > 0 ? " [" + tags.join(", ") + "]" : ""}`;
+    // Inline banner-style info: callees + callers
+    const callees = f.calls.length > 0 ? " → " + f.calls.slice(0, 5).join(", ") : "";
+    const callers = f.calledBy.length > 0 ? " ⇐ " + f.calledBy.slice(0, 3).join(", ") : callees ? " root" : "";
+    const bannerInfo = `${f.bodyLen || "?"}S/${f.params.length}P | cc=${f.complexity || 1}${callees}${callers}`;
+    return `${i + 1}. \`${f.name}\` | ${bannerInfo} [${why.join(", ") || "core"}] — ${(f.description || "").replace(/[[\]]/g, "")}${tags.length > 0 ? " [" + tags.join(", ") + "]" : ""}`;
   }).join("\n")}
 
 ## Skip

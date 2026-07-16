@@ -55,7 +55,7 @@ function main({ input, output, split } = {}) {
 
   // ==================== Append & Organize ====================
   const allSubFns = [...subFns1, ...subFns2];
-  console.log(`Total sub-functions: ${allSubFns.length}`);
+  console.log(`  Total sub-functions: ${allSubFns.length}`);
 
   const groups = new Map();
   for (const sf of allSubFns) {
@@ -188,13 +188,9 @@ function writeSingleOutput(ast, output, code) {
   // Safety: filter out any non-statement nodes from program body
   ast.program.body = ast.program.body.filter((n) => n && typeof n.type === "string" && n.type !== "CommentLine" && n.type !== "CommentBlock");
 
-  console.log("Generating output...");
-  const g0 = Date.now();
   const generated = generate(ast, DEFAULT_GENERATE_OPTS).code;
-  console.log(`Generated in ${Date.now() - g0}ms`);
 
   const mainFile = path.join(outDir, OUTPUT_FILES.MAIN);
-  console.log("Writing output...");
   fs.writeFileSync(mainFile, generated, "utf-8");
 
   const finalSize = fs.statSync(mainFile).size;

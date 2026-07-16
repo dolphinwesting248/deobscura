@@ -60,8 +60,10 @@ const ALERT_PATTERNS = [
   { label: "Crypto", regex: /\b(?:aes|des|rsa|xor|cipher|createHash|createCipher|createHmac|pbkdf2|randomBytes|createDecipher|subtle)\b/gi, severity: "high" },
   { label: "Eval/Dynamic", regex: /\b(?:eval|Function\s*\(|new\s+Function)\b/gi, severity: "critical" },
   { label: "Storage", regex: /\b(?:localStorage|sessionStorage|indexedDB|setItem|getItem|removeItem|clear\s*\(\))\b/gi, severity: "medium" },
-  { label: "DOM Sink", regex: /\b(?:innerHTML|outerHTML|insertAdjacentHTML|document\.write|document\.domain|location\s*=)\b/gi, severity: "medium" },
+  { label: "DOM Sink", regex: /\b(?:innerHTML\s*\+?=|outerHTML|insertAdjacentHTML|document\.write|document\.domain|location\s*=)\b/gi, severity: "high" },
   { label: "Network", regex: /\b(?:XMLHttpRequest|fetch|axios|WebSocket|EventSource|navigator\.sendBeacon|open\s*\(\s*["'][A-Z]+)\b/gi, severity: "medium" },
+  { label: "Anti-Debug", regex: /\b(?:console\.(?:clear|log|warn|error)|debugger|setInterval|setTimeout)\b/gi, severity: "low" },
+  { label: "Obfuscation", regex: /\b(?:btoa\s*\(|atob\s*\(|unescape|escape|decodeURIComponent\s*\(|rc4|base64|Function\s*\(\s*['\"]return)\b/gi, severity: "low" },
   { label: "Config Field", regex: /\b(?:baseURL|baseUrl|timeout|maxRetries|maxSize|maxLength|maxConcurrency|maxConnections)\b/gi, severity: "low" },
   { label: "Cross-Context", regex: /\b(?:postMessage|BroadcastChannel|MessagePort|SharedWorker)\b/gi, severity: "high" },
   { label: "Extension API", regex: /\b(?:chrome\.(?:storage|runtime|tabs|cookies|webRequest|scripting|downloads|notifications|alarms)|browser\.(?:storage|runtime|tabs|scripting))\b/gi, severity: "high" },
@@ -180,6 +182,7 @@ const CATEGORY_LABELS = {
   callback: "Callbacks",
   branch: "Branches",
   dynamic: "Dynamic Eval",
+  obfuscation: "Obfuscation Artifacts",
   other: "Other",
 };
 
@@ -242,6 +245,10 @@ const DOMAIN_RULES = [
   // Polyfills
   { tag: "Prototype-patched", regex: /\bprototype\s*\.\s*\w+\s*=/ },
   { tag: "Polyfill/Core-JS", regex: /\b(ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor|CreateMethodProperty|__core-js_shared__)\b/ },
+  // Application-level domains
+  { tag: "Auth Handler", regex: /\b(?:login|authenticate|password|credential|token|session|hashPassword|mfaVerify|OTP|2FA)\b/i, minCount: 3 },
+  { tag: "Data Pipeline", regex: /\b(?:JSON\.parse|Array\.isArray|\.filter\s*\(|\.map\s*\(|\.forEach\s*\(|\.sort\s*\(|\.group\s*\(|transform|aggregate|statistics)\b/ },
+  { tag: "CRUD API", regex: /\b(?:POST|GET|PUT|DELETE)\b.*\b(?:fetch|axios|xhr|sendRequest)\b|\b(?:fetch|axios)\b.*\b(?:POST|GET|PUT)\b/ },
 ];
 
 // ---- Function Category Rules (for categorizeFn) ----
@@ -255,6 +262,7 @@ const CATEGORY_RULES = [
   { category: "polyfill", regex: /\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__|ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor)\b/i },
   { category: "filesystem", regex: /\b(fs\.|fse\.|chmod|chown|statSync|mkdir|readFile|writeFile|copyFile|unlink|Buffer\.|glob\b|readdir|rmSync)\b/i },
   { category: "boilerplate", regex: /\b(__esModule|Object\.defineProperty|d\s*\(\s*exports|exports\s*\[)\b/ },
+  { category: "obfuscation", regex: /\b(?:Function\s*\(\s*['\"]return|constructor\s*\(\s*['\"]return|\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}|_0x[0-9a-fA-F]{4,6}|setInterval\s*\(\s*function.*toString|selfDefending|debugProtection)\b/ },
 ];
 
 // ---- Behavioral description patterns (for categorizeFn fallback) ----

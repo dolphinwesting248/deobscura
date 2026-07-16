@@ -317,9 +317,15 @@ function generateIndex(outputDir, opts) {
         ? refGraph.closureCaptures.filter((c) => c.fnName === f.name)
         : [];
       const uniqueCaptures = [...new Set(captures.map((c) => c.varName))];
+      // Filter obfuscated names: hex-prefixed (_0x), single-letter, all-hex
+      const isObfuscated = (n) => /^_0x/i.test(n) || /^[a-z]$/i.test(n) || /^[0-9a-f]{4,}$/i.test(n);
+      const readableCaptures = uniqueCaptures.filter((n) => !isObfuscated(n));
+      const obfuscatedCount = uniqueCaptures.length - readableCaptures.length;
       const closureStr =
         uniqueCaptures.length > 0
-          ? "closure: " + uniqueCaptures.join(", ")
+          ? "closure: " +
+            readableCaptures.join(", ") +
+            (obfuscatedCount > 0 ? (readableCaptures.length > 0 ? " +" : "") + obfuscatedCount + " obf" : "")
           : "";
       const roles = f.paramRoles || "";
       // Disambiguate single-letter names with parent context

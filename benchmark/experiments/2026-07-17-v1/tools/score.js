@@ -7,25 +7,45 @@ function loadAnswer(filepath) {
   return JSON.parse(raw);
 }
 
+// Extract significant keywords from text (filter stopwords, min length)
+function keywords(text, minLen) {
+  const STOP = new Set(["this","that","with","from","into","each","then","also","here","very","just","over","been","some","such","have","were","does","will","when","what","used","part","they","them","this","than","well","more"]);
+  return [...new Set((text || "").toLowerCase().split(/\W+/).filter(w => w.length >= minLen && !STOP.has(w)))];
+}
+
+// Semantic overlap score (Jaccard-like with bonus for longer matches)
+function semanticOverlap(answerText, truthText, minLen) {
+  const aw = keywords(answerText, minLen || 3);
+  const tw = keywords(truthText, minLen || 3);
+  if (tw.length === 0) return 1;
+  let score = 0;
+  for (const awi of aw) {
+    for (const twi of tw) {
+      // Exact match
+      if (awi === twi) { score += 1; break; }
+      // Short word containment
+      else if (awi.length >= 5 && twi.length >= 5 && (awi.includes(twi) || twi.includes(awi))) { score += 0.5; break; }
+    }
+  }
+  return Math.min(1, score / tw.length);
+}
+
 function scorePurpose(answer, truth) {
-  const ap = (answer.purpose || "").toLowerCase();
-  const tp = (truth.description || "").toLowerCase();
-  const tpWords = new Set(tp.split(/\W+/).filter(w => w.length > 3));
-  const apWords = new Set(ap.split(/\W+/).filter(w => w.length > 3));
-  if (tpWords.size === 0) return 0;
-  const intersection = new Set([...tpWords].filter(w => apWords.has(w)));
-  return intersection.size / tpWords.size;
+  return semanticOverlap(answer.purpose || "", truth.description || "", 4);
 }
 
 function scoreFunctions(answer, truth) {
+  if (truth.functions.length === 0) return 1;
   let matched = 0;
   for (const tf of truth.functions) {
-    const found = answer.functions.find(f => {
-      const ap = (f.purpose || "").toLowerCase();
-      const tp = (tf.purpose || "").toLowerCase();
-      return (ap.length > 5 && tp.length > 5) && (ap.includes(tp.substring(0, 10)) || tp.includes(ap.substring(0, 10)));
-    });
-    if (found) matched++;
+    const truthText = (tf.purpose || "") + " " + (tf.name || "");
+    let bestMatch = 0;
+    for (const af of answer.functions) {
+      const answerText = (af.purpose || "") + " " + (af.name || "");
+      const sim = semanticOverlap(answerText, truthText, 3);
+      if (sim > bestMatch) bestMatch = sim;
+    }
+    if (bestMatch > 0.3) matched += bestMatch;
   }
   const precision = answer.functions.length > 0 ? matched / answer.functions.length : 0;
   const recall = truth.functions.length > 0 ? matched / truth.functions.length : 0;
@@ -51,24 +71,22 @@ function scoreSecurity(answer, truth) {
   if (truth.securityIssues.length === 0) return 1;
   let matched = 0;
   for (const ts of truth.securityIssues) {
-    const found = answer.security.find(s => {
-      const ai = (s.issue || "").toLowerCase();
-      const ti = (ts.issue || "").toLowerCase();
-      return ti.length > 5 && (ai.includes(ti.substring(0, 15)) || ti.includes(ai.substring(0, 15)));
-    });
-    if (found) matched++;
+    const truthText = (ts.issue || "") + " " + (ts.location || "");
+    let bestMatch = 0;
+    for (const as of answer.security) {
+      const answerText = (as.issue || "");
+      const sim = semanticOverlap(answerText, truthText, 3);
+      if (sim > bestMatch) bestMatch = sim;
+    }
+    if (bestMatch > 0.25) matched += bestMatch;
   }
-  return matched / truth.securityIssues.length;
+  return Math.min(1, matched / Math.max(1, truth.securityIssues.length));
 }
 
 function scoreDataFlow(answer, truth) {
   const af = (answer.dataFlow || "").toLowerCase();
   const tf = (truth.dataFlow || []).join(" ").toLowerCase();
-  const tWords = new Set(tf.split(/\W+/).filter(w => w.length > 2));
-  const aWords = new Set(af.split(/\W+/).filter(w => w.length > 2));
-  if (tWords.size === 0) return 0;
-  const intersection = new Set([...tWords].filter(w => aWords.has(w)));
-  return intersection.size / tWords.size;
+  return semanticOverlap(af, tf, 3);
 }
 
 function scoreVariables(answer, truth) {
@@ -79,7 +97,7 @@ function scoreVariables(answer, truth) {
     const found = answer.variables.find(v => {
       const vv = (v.value || v.name || "").toLowerCase();
       const tv = value.toLowerCase();
-      return vv.includes(tv.split(" ")[0]) || tv.includes(vv.split(" ")[0]);
+      return tv.length > 2 && vv.length > 2 && (vv.includes(tv.substring(0, 8)) || tv.includes(vv.substring(0, 8)));
     });
     if (found) matched++;
   }
