@@ -416,20 +416,46 @@ function extractInlineFunctions(ast) {
     return name;
   }
 
-  function walk(node, parentArray, stmtIndex, enclosingFn) {
+  // Collect enclosing scope defs for a function node
+  function collectEnclosingDefs(fn) {
+    const defs = new Set();
+    for (const p of fn.params) { if (t.isIdentifier(p)) defs.add(p.name); }
+    if (t.isBlockStatement(fn.body)) {
+      for (const s of fn.body.body) {
+        if (t.isVariableDeclaration(s)) {
+          for (const d of s.declarations) { if (t.isIdentifier(d.id)) defs.add(d.id.name); }
+        }
+        if (t.isFunctionDeclaration(s) && s.id) defs.add(s.id.name);
+      }
+    }
+    return defs;
+  }
+
+  function walk(node, parentArray, stmtIndex, enclosingFnDefs) {
     if (!node || typeof node !== "object") return;
+
+    // Track enclosing function scopes — accumulate defs when entering a function
+    let childDefs = enclosingFnDefs;
+    if (t.isFunctionDeclaration(node) || t.isFunctionExpression(node) || t.isArrowFunctionExpression(node)) {
+      const ownDefs = collectEnclosingDefs(node);
+      if (enclosingFnDefs && enclosingFnDefs.size > 0) {
+        childDefs = new Set([...enclosingFnDefs, ...ownDefs]);
+      } else {
+        childDefs = ownDefs;
+      }
+    }
 
     // --- Return statement with FunctionExpression/ArrowFunction ---
     if (t.isReturnStatement(node) && node.argument) {
       const fn = findEmbeddedFn(node.argument);
       if (fn && t.isBlockStatement(fn.body)) {
         const name = uniqueName(`${SUB_FN_PREFIX}return_${++count}_fn`);
-        // Collect external refs from the function body
         const fnParamNames = new Set(fn.params.map((p) => (t.isIdentifier(p) ? p.name : null)).filter(Boolean));
         const defined = collectDefined(fn.body.body);
         for (const n of fnParamNames) defined.add(n);
+        // Include enclosing scope defs to avoid re-passing available vars
+        if (enclosingFnDefs) for (const n of enclosingFnDefs) defined.add(n);
         const extRefs = getExternalRefs(fn.body, defined);
-        // Combine params + external refs
         const allParams = [
           ...fn.params.map((p) => cloneParam(p)),
           ...extRefs.filter((r) => !fnParamNames.has(r)).map((r) => t.identifier(r)),
@@ -438,7 +464,6 @@ function extractInlineFunctions(ast) {
         if (fn.async) rfFn.async = true;
         if (fn.generator) rfFn.generator = true;
         newFns.push(rfFn);
-        // Replace function expression with reference
         replaceFnRef(node, "argument", fn, t.identifier(name));
       }
     }
@@ -451,8 +476,16 @@ function extractInlineFunctions(ast) {
           const varName = t.isIdentifier(decl.id) ? decl.id.name : `var${count}`;
           const name = uniqueName(`${SUB_FN_PREFIX}${varName}_${count}_fn`);
           const fn = decl.init;
-          const params = fn.params.map((p) => cloneParam(p));
-          const vFn = t.functionDeclaration(t.identifier(name), params, fn.body);
+          const fnParamNames = new Set(fn.params.map((p) => (t.isIdentifier(p) ? p.name : null)).filter(Boolean));
+          const defined = collectDefined(fn.body.body);
+          for (const n of fnParamNames) defined.add(n);
+          if (enclosingFnDefs) for (const n of enclosingFnDefs) defined.add(n);
+          const extRefs = getExternalRefs(fn.body, defined);
+          const allParams = [
+            ...fn.params.map((p) => cloneParam(p)),
+            ...extRefs.filter((r) => !fnParamNames.has(r)).map((r) => t.identifier(r)),
+          ];
+          const vFn = t.functionDeclaration(t.identifier(name), allParams, fn.body);
           if (fn.async) vFn.async = true;
           if (fn.generator) vFn.generator = true;
           newFns.push(vFn);
@@ -468,10 +501,10 @@ function extractInlineFunctions(ast) {
       const val = node[key];
       if (Array.isArray(val)) {
         for (let i = 0; i < val.length; i++) {
-          if (val[i] && typeof val[i].type === "string") walk(val[i], val, i, enclosingFn);
+          if (val[i] && typeof val[i].type === "string") walk(val[i], val, i, childDefs);
         }
       } else if (val && typeof val.type === "string") {
-        walk(val, null, -1, enclosingFn);
+        walk(val, null, -1, childDefs);
       }
     }
   }
