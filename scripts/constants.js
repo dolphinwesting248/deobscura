@@ -259,8 +259,8 @@ const DOMAIN_RULES = [
 // Simple regex → category rules. Checked in order; first match wins.
 const CATEGORY_RULES = [
   { category: "network", regex: /\b(axios|fetch|xhr\b|XMLHttpRequest|User-Agent|responseType|rateLimit|FormData|x-www-form)\b/i },
-  { category: "websocket", regex: /\b(websocket|ws\.|readyState|WebSocket|handshake|close code|terminate|ping\b|pong\b|subprotocol|permessage-deflate|_socket\b)\b/i },
-  { category: "crypto", regex: /\b(crypto|sha512|sha256|hmac|md5|encrypt|decrypt|sign\b|cipher\b|hash\b|randomBytes|pbkdf2)\b/i },
+  { category: "websocket", regex: /\b(websocket|WebSocket|ws\s*\.\s*send|ws\s*\.\s*close|handshake|close\s+code|subprotocol|permessage-deflate|_socket\b|ping\s*\(\s*\)|pong\s*\(\s*\))\b/i },
+  { category: "crypto", regex: /\b(crypto|sha(?:512|256|384|1)\b|hmac|md5|encrypt|decrypt|cipher\b|randomBytes|pbkdf2|createHash|createCipher|createHmac|createDecipher)\b/i },
   { category: "parser", regex: /\b(yaml|parser|scalar|blockMap|blockSeq|flowSeq|resolved\b|YAML\b)\b/i },
   { category: "i18n", regex: /\b(i18n|i18next|translat|lng\b|interpolat|plural|namespace|resStore|ns\b)\b/i },
   { category: "polyfill", regex: /\b(core-js|polyfill|prototype\.\w+\s*=\s*function|__core-js_shared__|ToPrimitive|OrdinaryToPrimitive|IsCallable|GetMethod|SpeciesConstructor)\b/i },
