@@ -78,42 +78,25 @@ function generateReadingGuide(report) {
 
 function generateMarkdown(report, opts) {
   if (report.error) return `# ${report.file} · Structure Report\n\n> **${report.error}**\n`;
-  const brief = opts && opts.brief;
-  const fallbackNote = report.fallback ? " *(regex-based fallback)*" : "";
-  const { file, summary, hotspots, tracePath, alerts, naming, functions } = report;
+  const { file, summary, hotspots, tracePath, alerts, functions } = report;
 
   const tldr = report.tldr || generateTLDR(report);
   const domain = report._filepath ? classifyDomain(report._filepath) : "Unknown";
-  const density = computeDensity(functions, file);
-  let result = `# ${file} · Structure Report${fallbackNote}
+  const result = `# ${file} · Structure Report
 
-> Previous: ${OUTPUT_FILES.PROMPT}  →  **Now: ${OUTPUT_FILES.STRUCTURE}**  →  Next: 2-index.txt → jump to ${OUTPUT_FILES.MAIN}
->
 > ${tldr}
 
-## Summary
-
-| Metric | Value |
-|--------|-------|
-| Domain | ${domain} |
-| Total functions | ${summary.totalFunctions} |
-| Sub-functions | ${summary.subFunctions} |
-| Original functions | ${summary.originalFunctions} |
-| Max nesting depth | ${summary.maxDepth} |
-| Max complexity | ${summary.maxComplexity || "-"} |
-| Flattened (susp.) | ${summary.flattened || 0} |
-| Suspicious patterns | ${summary.suspicious || 0} |
-| Code density | ${report._density || computeDensity(functions, file)} |
-
+- Domain: **${domain}** · ${summary.totalFunctions} functions · ${summary.subFunctions} sub-fns · max cc ${summary.maxComplexity || "-"}
+${tracePath && tracePath.length > 1 ? `- **Trace:** \`${tracePath.join("\` → \`")}\`\n` : ""}
 ## Hotspots
 
-${tracePath && tracePath.length > 1 ? `**Trace:** \`${tracePath.join("\` → \`")}\`\n\n` : ""}${hotspots.mostCalled.length > 0 ? `| Rank | Type | Details |
+${hotspots.mostCalled.filter(f => f.calledBy.length >= 3).length > 0 ? `| Rank | Type | Details |
 |------|------|---------|
-${hotspots.mostCalled.map((f, i) => `| ${i + 1} | Most-called | \`${f.name}\` — called by ${f.calledBy.length} functions, calls ${f.calls.length} others |`).join("\n")}
-` : ""}${hotspots.roots.length > 0 ? `| — | Roots (${hotspots.roots.length}) | Entry points: ${hotspots.roots.slice(0, 8).map((f) => `\`${f.name}\``).join(", ")}${hotspots.roots.length > 8 ? " …" : ""} |\n` : ""}${hotspots.leaves.length > 0 ? `| — | Leaves (${hotspots.leaves.length}) | Terminal functions: ${hotspots.leaves.slice(0, 8).map((f) => `\`${f.name}\``).join(", ")}${hotspots.leaves.length > 8 ? " …" : ""} |\n` : ""}${hotspots.mostCalled.length === 0 && hotspots.roots.length === 0 && hotspots.leaves.length === 0 ? "_No cross-function calls detected._\n" : ""}
+${hotspots.mostCalled.filter(f => f.calledBy.length >= 3).map((f, i) => `| ${i + 1} | Most-called | \`${f.name}\` — called by ${f.calledBy.length} functions, calls ${f.calls.length} others |`).join("\n")}
+` : ""}${hotspots.roots.length > 0 ? `| — | Roots (${hotspots.roots.length}) | Entry points: ${hotspots.roots.slice(0, 8).map((f) => `\`${f.name}\``).join(", ")}${hotspots.roots.length > 8 ? " …" : ""} |\n` : ""}${hotspots.mostCalled.filter(f => f.calledBy.length >= 3).length === 0 && hotspots.roots.length === 0 ? "_No significant call patterns._\n" : ""}
 ## String Alerts
 
-${alerts.length === 0 ? "_No significant patterns detected._\n" : (() => { const deduped = []; const seen = new Map(); for (const a of alerts) { const key = a.label + "|" + a.fn; if (seen.has(key)) { const prev = deduped[seen.get(key)]; prev.matches = [...new Set([...prev.matches, ...a.matches])]; if (!prev._count) prev._count = 1; prev._count++; continue; } seen.set(key, deduped.length); deduped.push({...a, _count: 1}); } return `| Severity | Pattern | Function | Trace | Matches |
+${alerts.length === 0 ? "" : (() => { const deduped = []; const seen = new Map(); for (const a of alerts) { const key = a.label + "|" + a.fn; if (seen.has(key)) { const prev = deduped[seen.get(key)]; prev.matches = [...new Set([...prev.matches, ...a.matches])]; if (!prev._count) prev._count = 1; prev._count++; continue; } seen.set(key, deduped.length); deduped.push({...a, _count: 1}); } return `| Severity | Pattern | Function | Trace | Matches |
 |----------|---------|----------|-------|---------|
 ${deduped.map((a) => {
     const tr = (report.alertTraces || []).find((t) => t.fn === a.fn);
@@ -122,55 +105,16 @@ ${deduped.map((a) => {
     const count = a._count > 1 ? " (x" + a._count + ")" : "";
     return `| ${a.severity} | ${a.label} | \`${a.fn}\` | ${traceStr} | ${a.matches.slice(0, 3).join(" · ")}${a.matches.length > 3 ? " +" + (a.matches.length - 3) : ""}${count} |`;
   }).join("\n")}
-`})()}
-## Hot Groups
+`})()}${hotspots.hotGroups.filter(([, c]) => c > 0).length >= 5 ? `## Hot Groups
 
-${hotspots.hotGroups.filter(([, c]) => c > 0).length === 0 ? "_No significant group activity._\n" : `| Rank | Group | Edges |
+| Rank | Group | Edges |
 |------|-------|-------|
 ${hotspots.hotGroups.filter(([, c]) => c > 0).map(([g, c], i) => `| ${i + 1} | \`${g}\` | ${c} |`).join("\n")}
-`}
-${functions.filter((f) => f.calls.length > 0).length > 0 ? `## Call Graph
+` : ""}## Naming Convention
 
-\`\`\`mermaid
-graph TD
-${functions.filter((f) => f.calls.length > 0).map((f) =>
-    f.calls.map((c) => `  ${f.name} --> ${c}`).join("\n")
-  ).join("\n")}
-\`\`\`
-
-## Naming Convention` : `_No cross-function call edges to graph._
-
-## Naming Convention`}
-
-All sub-functions follow the format: \`_S_<parent>_<seq>_<hint>\`
-
-| Component | Meaning |
-|-----------|---------|
-| \`_S_\` | Prefix indicating an extracted sub-function |
-| \`<parent>\` | The parent function name, object method name, or line number (\`lXXXX\`) for anonymous functions |
-| \`<seq>\` | Two-digit sequence number indicating extraction order within the parent |
-| \`<hint>\` | Short hint about the extracted code structure |
-| \`_L<line>\` | (Collision only) Source line number appended when name would otherwise collide |
-
-### Examples
-
-| Name | Meaning |
-|------|---------|
-${naming.examples.map((e) => `| \`${e.name}\` | ${e.meaning} |`).join("\n")}
-
-### Hint Descriptions
-
-| Hint | Meaning |
-|------|---------|
-${Object.entries(naming.hints).map(([k, v]) => `| \`${k}\` | ${v} |`).join("\n")}
-
----
-Generated by deob · ${new Date().toISOString().slice(0, 10)}
+\`_S_<parent>_<seq>_<hint>\` — \`try\`=try body, \`catch\`=catch handler, \`if\`=if branch, \`else\`=else branch, \`case\`=switch case, \`iife\`=IIFE, \`init\`=var init, \`return\`=inline fn, \`block\`=code block, \`loop\`=loop body. \`_L<line>\` disambiguates collisions.
 `;
-  if (brief) {
-    const idx = result.indexOf("\n## Naming Convention\n");
-    if (idx > 0) return result.substring(0, idx) + "\n---\n*Naming convention: see summary.md*\n";
-  }
+
   return result;
 }
 
@@ -232,16 +176,22 @@ function generatePromptFile(outputDir) {
   const contextLine = domain !== "General JS" ? `${domain}` : "";
   const purposeLine = [contextLine, alertSummary].filter(Boolean).join(" — ");
 
+  // Threshold filters
+  const bigFile = summary.totalFunctions > 100;
+  const hasFlatOrSusp = summary.flattened > 0 || summary.suspicious > 0;
+  const captureCount = refGraph ? new Set(refGraph.closureCaptures.map(c => c.varName)).size : 0;
+  const showCaptures = captureCount > 20;
+
   const content = `You are analyzing deobfuscated JavaScript from \`${file}\`. The preprocessor already determined:
 ${zeroFnWarning}${chunkWarning}${purposeLine ? `\n> **Context**: ${purposeLine}\n` : ""}
 ## Architecture
 - ${summary.totalFunctions} functions (${summary.originalFunctions} original, ${summary.subFunctions} extracted)
 - Domain: **${domain}**
-- ${summary.flattened} flattened, ${summary.suspicious} suspicious patterns, max complexity ${summary.maxComplexity}
-- Code density: ${computeDensity(functions, file)}
-${decoder ? `- **String decoder**: \`${decoder.name}\` — self-modifying lookup, called by ${decoder.calledBy.length} functions. Strings are NOT yet decoded — you will see opaque calls like \`_0x13f90f(0x1818)\`.` : ""}
+${hasFlatOrSusp ? `- ${summary.flattened} flattened, ${summary.suspicious} suspicious patterns` : ""}${hasFlatOrSusp ? `, max complexity ${summary.maxComplexity}` : `- Max complexity: ${summary.maxComplexity}`}
+${bigFile ? `- Code density: ${computeDensity(functions, file)}` : ""}
+${decoder ? `- **String decoder**: \`${decoder.name}\` (strings NOT decoded)` : ""}
 ${roots.length > 0 ? `- **Entry point**: \`${roots[0].name}\` → ${roots[0].calls.slice(0,5).join(", ")}${roots[0].calls.length > 5 ? " +" + (roots[0].calls.length - 5) : ""}` : ""}
-${refGraph && refGraph.closureCaptures.length > 0 ? `- **Closure captures**: ${new Set(refGraph.closureCaptures.map(c => c.varName)).size} variables captured by ${new Set(refGraph.closureCaptures.map(c => c.fnName)).size} functions` : ""}
+${showCaptures ? `- **Closure captures**: ${captureCount} variables captured by ${new Set(refGraph.closureCaptures.map(c => c.fnName)).size} functions` : ""}
 ${refGraph ? (() => { const shared = [...refGraph.varUsedBy.entries()].filter(([n, fns]) => fns.size >= 2).sort((a, b) => b[1].size - a[1].size).slice(0, 5); return shared.length > 0 ? `- **Shared variables**: ${shared.map(([n, fns]) => `${n} (${fns.size} functions)`).join(", ")}` : ""; })() : ""}
 
 ## Alerts (${alerts.filter(a => a.severity !== "info" && a.severity !== "low").length} significant)
@@ -252,30 +202,18 @@ ${alerts.filter(a => a.severity !== "info" && a.severity !== "low").slice(0, 10)
   }).join("\n") || "_No significant security alerts detected._"}
 ${alerts.filter(a => a.severity === "info" || a.severity === "low").length > 0 ? `\n_${alerts.filter(a => a.severity === "info" || a.severity === "low").length} low/info alerts omitted (denoised)._` : ""}
 
-## Start Here (top 5 by interest score)
-_Function: name | Ss/Pp | cc=N → callees ⇐ callers | tags — description_
+## Start Here (top 5)
 ${scored.map((f, i) => {
     const why = [];
     if (alerts.some((a) => a.fn === f.name)) why.push("alerts");
     if (f.flat) why.push("flattened");
-    if ((f.suspicious || []).length > 0) why.push("suspicious");
     if (f.complexity > 5) why.push("cc=" + f.complexity);
-    const tags = f.semanticTags || [];
-    // Inline banner-style info: callees + callers
     const callees = f.calls.length > 0 ? " → " + f.calls.slice(0, 5).join(", ") : "";
     const callers = f.calledBy.length > 0 ? " ⇐ " + f.calledBy.slice(0, 3).join(", ") : callees ? " root" : "";
-    const bannerInfo = `${f.bodyLen || "?"}S/${f.params.length}P | cc=${f.complexity || 1}${callees}${callers}`;
-    return `${i + 1}. \`${f.name}\` | ${bannerInfo} [${why.join(", ") || "core"}] — ${(f.description || "").replace(/[[\]]/g, "")}${tags.length > 0 ? " [" + tags.join(", ") + "]" : ""}`;
+    return `${i + 1}. \`${f.name}\` | ${f.bodyLen || "?"}/${f.params.length}P${callees}${callers} | ${f.description || ""}${why.length > 0 ? " [" + why.join(", ") + "]" : ""}`;
   }).join("\n")}
 
-## Skip
-${passThrough} pass-through functions (zero logic). See \`2-index.txt\` for full function catalog.
-
-## Reading Path
-1. **This file** (${OUTPUT_FILES.PROMPT}) — architecture, alerts, top 5 functions to start with
-2. **${OUTPUT_FILES.STRUCTURE}** — call graph, hotspots, full alert traces, naming convention
-3. **2-index.txt** — function catalog with line numbers → jump to \`${OUTPUT_FILES.MAIN}\`
-`;
+${passThrough > 0 ? `## Skip\n${passThrough} pass-through functions (zero logic). See \`2-index.txt\` for full function catalog.\n` : ""}`;
   const outPath = path.join(outputDir, OUTPUT_FILES.PROMPT);
   fs.writeFileSync(outPath, content, "utf-8");
   console.log(`  0-prompt: ${outPath}`);

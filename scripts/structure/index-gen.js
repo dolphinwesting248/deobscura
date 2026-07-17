@@ -81,75 +81,13 @@ function generateIndex(outputDir, opts) {
   lines.push("");
 
   if (isDirMode) {
-    lines.push(`_See ../${OUTPUT_FILES.SUMMARY} for symbol definitions and legend._`);
+    lines.push(`_See ../${OUTPUT_FILES.SUMMARY} for legend._`);
     lines.push("");
   } else {
-    lines.push("## Sections");
-    lines.push(
-      "entry     — entry point functions (no callers, start analysis here)",
-    );
-    lines.push(
-      "alerts    — security patterns detected (URL, eval, fingerprint, etc.)",
-    );
-    lines.push("hot       — most-called functions (highest caller count)");
-    lines.push("lookup    — keyword → function name mapping");
-    lines.push("trace     — longest call path through the code");
-    lines.push("suspicious — functions with suspicious patterns");
-    lines.push("flat      — control-flow flattened functions (while+switch)");
-    lines.push("shared    — variables used by 2+ functions (⇒ = used by)");
-    lines.push(
-      "fn/<cat>  — functions grouped by category (see CATEGORY_LABELS)",
-    );
-    lines.push("");
-    lines.push("## Function Entry Format");
-    lines.push(
-      "name | Ss/Pp | cc=N | → callees ⇐ callers | closure: v1, v2 ; paramRoles ; [semTags] ; flags",
-    );
-    lines.push("");
-    lines.push("## Fields");
-    lines.push("Ss/Pp       = S statements, P parameters");
-    lines.push(
-      "cc=N        = cyclomatic complexity (branch density, higher = more branches)",
-    );
-    lines.push("→ fn        = calls function fn");
-    lines.push("⇐ fn        = called by function fn");
-    lines.push("root        = entry point (no callers)");
-    lines.push(
-      "closure: v  = captures variable v from outer scope (closure capture)",
-    );
-    lines.push("");
-    lines.push("## Parameter Roles (paramRoles)");
-    lines.push("this=x      = parameter used as this context");
-    lines.push("cb=x        = parameter called as callback function");
-    lines.push("out=x       = parameter properties are assigned to");
-    lines.push("arg=x       = ordinary argument");
-    lines.push("ret=x       = used in return value construction");
-    lines.push("");
-    lines.push("## Semantic Tags [semTags]");
-    lines.push("[returns value]        = function has a return value");
-    lines.push("[returns via N paths]  = N distinct return paths");
-    lines.push("[returns conditional]  = conditional return");
-    lines.push("[returns str/prop]     = returns string / property");
-    lines.push("[void, NS]             = no return value, N statements");
-    lines.push("[callback-driven]      = parameters are called as callbacks");
-    lines.push("[can throw]            = may throw exceptions");
-    lines.push("[side-effects]         = has side effects (I/O, DOM, mutation)");
-    lines.push("[config]               = configuration-related");
-    lines.push("[calls → fn]           = directly invokes fn");
-    lines.push("");
-    lines.push("## Flags");
-    lines.push("FLAT         = control-flow flattened (while+switch dispatcher)");
-    lines.push("DATA         = heavy hex data (large constant arrays)");
-    lines.push("[Label]      = security alert (see 1-structure.md)");
-    lines.push("");
-    lines.push("## Separators");
-    lines.push("|  = field separator (name / size / cc / edges / extras)");
-    lines.push(
-      ",  = list separator within a field (multiple callees, multiple roles)",
-    );
-    lines.push(
-      ";  = extras separator (between closure, paramRoles, semTags, and flags)",
-    );
+    lines.push("## Legend");
+    lines.push("name | Ss/Pp | cc=N | → callees ⇐ callers | extras");
+    lines.push("S=statements, P=params, cc=complexity, → calls, ⇐ called-by, root=entry");
+    lines.push("closure:v = captures v, [tag] = semantic tag, FLAT=flattened, DATA=hex-data");
     lines.push("");
   }
 
@@ -179,8 +117,8 @@ function generateIndex(outputDir, opts) {
     lines.push("");
   }
 
-  // Hot functions
-  const mc = (hotspots.mostCalled || []).filter((f) => f.calledBy.length > 0);
+  // Hot functions — only show if any have >2 callers
+  const mc = (hotspots.mostCalled || []).filter((f) => f.calledBy.length > 2);
   if (mc.length > 0) {
     lines.push("## hot");
     for (const f of mc) {
@@ -189,8 +127,8 @@ function generateIndex(outputDir, opts) {
     lines.push("");
   }
 
-  // Word lookup
-  if (lookup.length > 0) {
+  // Word lookup — only show if >10 entries
+  if (lookup && lookup.length > 10) {
     lines.push("## lookup");
     for (const [word, fns] of lookup.slice(0, 30)) {
       lines.push(
