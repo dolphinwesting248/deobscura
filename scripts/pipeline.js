@@ -24,10 +24,12 @@ function main({ input, output, split } = {}) {
   if (!output) throw new Error("main() requires { output: '<path>' }");
   resetNames();
   resetInlineNames();
+  const pipelineStart = Date.now();
 
   console.log("Reading file...");
   const code = fs.readFileSync(input, "utf-8");
-  console.log(`Size: ${(code.length / 1024 / 1024).toFixed(2)} MB`);
+  const sizeLabel = code.length > 1024 * 1024 ? `${(code.length / 1024 / 1024).toFixed(1)} MB` : `${(code.length / 1024).toFixed(0)} KB`;
+  console.log(`Size: ${sizeLabel}`);
 
   console.log("Parsing AST...");
   let ast;
@@ -171,12 +173,16 @@ function main({ input, output, split } = {}) {
   pushDataToBottom(ast);
 
   // ==================== Output ====================
+  let result;
   if (split) {
-    writeSplitOutput(ast, output, code);
-    return null;
+    result = writeSplitOutput(ast, output, code);
   } else {
-    return writeSingleOutput(ast, output, code);
+    result = writeSingleOutput(ast, output, code);
   }
+  const totalMs = Date.now() - pipelineStart;
+  const speed = (code.length / 1024 / (totalMs / 1000)).toFixed(0);
+  console.log(`${c.dim}Total: ${totalMs}ms (${speed} KB/s)${c.reset}`);
+  return result;
 }
 
 function writeSingleOutput(ast, output, code) {

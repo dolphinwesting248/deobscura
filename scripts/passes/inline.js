@@ -40,31 +40,48 @@ function inlineReadOnlyProperties(ast, refGraph) {
   findConfigs(ast);
   console.log(`  Found ${configs.size} config objects`);
 
-  // Phase 2: collect mutated variables (assignment to properties)
-  if (refGraph) {
-    // Reuse shared refGraph — filter to direct mutations
-    for (const name of refGraph.isMutated) configs.delete(name);
-  } else {
-    const mutated = new Set();
-    function collectMutations(node) {
-      if (!node || typeof node !== "object") return;
-      if (t.isAssignmentExpression(node) && t.isMemberExpression(node.left) && t.isIdentifier(node.left.object)) {
-        mutated.add(node.left.object.name);
-      }
-      if (t.isUpdateExpression(node) && t.isMemberExpression(node.argument) && t.isIdentifier(node.argument.object)) {
-        mutated.add(node.argument.object.name);
-      }
-      for (const key of Object.keys(node)) {
-        if (SKIP_KEYS.has(key)) continue;
-        const val = node[key];
-        if (Array.isArray(val)) { for (const v of val) collectMutations(v); }
-        else if (val && typeof val.type === "string") collectMutations(val);
-      }
+  // Phase 2: collect mutated properties per config (remove only mutated props)
+  const mutatedProps = new Map(); // varName -> Set<propName>
+  function collectMutations(node) {
+    if (!node || typeof node !== "object") return;
+    if (t.isAssignmentExpression(node) && t.isMemberExpression(node.left) &&
+        t.isIdentifier(node.left.object) && t.isIdentifier(node.left.property)) {
+      const varName = node.left.object.name;
+      if (!mutatedProps.has(varName)) mutatedProps.set(varName, new Set());
+      mutatedProps.get(varName).add(node.left.property.name);
     }
-    collectMutations(ast);
-    for (const name of mutated) configs.delete(name);
+    if (t.isUpdateExpression(node) && t.isMemberExpression(node.argument) &&
+        t.isIdentifier(node.argument.object) && t.isIdentifier(node.argument.property)) {
+      const varName = node.argument.object.name;
+      if (!mutatedProps.has(varName)) mutatedProps.set(varName, new Set());
+      mutatedProps.get(varName).add(node.argument.property.name);
+    }
+    for (const key of Object.keys(node)) {
+      if (SKIP_KEYS.has(key)) continue;
+      const val = node[key];
+      if (Array.isArray(val)) { for (const v of val) collectMutations(v); }
+      else if (val && typeof val.type === "string") collectMutations(val);
+    }
   }
-  console.log(`  ${configs.size} remain after mutation check`);
+  collectMutations(ast);
+
+  // Also check refGraph for whole-variable mutations
+  if (refGraph) {
+    for (const name of refGraph.isMutated) configs.delete(name);
+  }
+
+  // Remove only mutated properties from remaining configs
+  let removedProps = 0;
+  for (const [varName, props] of mutatedProps) {
+    if (configs.has(varName)) {
+      const cfg = configs.get(varName);
+      for (const propName of props) {
+        if (cfg[propName] !== undefined) { delete cfg[propName]; removedProps++; }
+      }
+      if (Object.keys(cfg).length === 0) configs.delete(varName);
+    }
+  }
+  console.log(`  ${configs.size} remain after mutation check (${removedProps} mutated props removed)`);
 
   // Phase 3: inline VAR.PROP → literal across the entire AST
   function walk(node) {
