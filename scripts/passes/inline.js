@@ -73,7 +73,7 @@ function inlineReadOnlyProperties(ast, refGraph) {
     // VAR.PROP → literal value
     if (t.isMemberExpression(node) && !node.computed && t.isIdentifier(node.object) && t.isIdentifier(node.property)) {
       const cfg = configs.get(node.object.name);
-      if (cfg && cfg[node.property.name] !== undefined) {
+      if (cfg && Object.prototype.hasOwnProperty.call(cfg, node.property.name)) {
         count++;
         return clone(cfg[node.property.name]);
       }

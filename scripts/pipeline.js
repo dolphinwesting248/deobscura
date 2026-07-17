@@ -188,37 +188,7 @@ function writeSingleOutput(ast, output, code) {
   // Safety: filter out any non-statement nodes from program body
   ast.program.body = ast.program.body.filter((n) => n && typeof n.type === "string" && n.type !== "CommentLine" && n.type !== "CommentBlock");
 
-  // Recursively clean invalid nodes (plain Function objs or non-string type) that Babel can't generate
-  function cleanInvalidNodes(node, parent, key, idx) {
-    if (!node) return;
-    // Plain JS Function objects (typeof === 'function') or nodes with non-string type
-    if (typeof node === "function" || (typeof node === "object" && typeof node.type !== "string")) {
-      if (parent && key !== undefined) {
-        if (idx !== undefined) parent[key][idx] = t.identifier("__cleaned__");
-        else parent[key] = t.identifier("__cleaned__");
-      }
-      return;
-    }
-    for (const k of Object.keys(node)) {
-      if (k === "start" || k === "end" || k === "loc" ||
-          k === "leadingComments" || k === "trailingComments" || k === "innerComments") continue;
-      const v = node[k];
-      if (Array.isArray(v)) {
-        for (let i = v.length - 1; i >= 0; i--) cleanInvalidNodes(v[i], node, k, i);
-      } else if (v && typeof v === "object") {
-        cleanInvalidNodes(v, node, k);
-      }
-    }
-  }
-  cleanInvalidNodes(ast);
-
-  let generated;
-  try {
-    generated = generate(ast, DEFAULT_GENERATE_OPTS).code;
-  } catch (e) {
-    console.error(`  Babel generate error: ${e.message.split("\\n")[0]}`);
-    return "";
-  }
+  const generated = generate(ast, DEFAULT_GENERATE_OPTS).code;
 
   const mainFile = path.join(outDir, OUTPUT_FILES.MAIN);
   fs.writeFileSync(mainFile, generated, "utf-8");
