@@ -1,0 +1,27 @@
+You are analyzing deobfuscated JavaScript to reverse-engineer client-side encryption. Read the deob output at results/deob-output/scenario_C_deob/.
+
+Your task: Find the RC4 string decoder and HMAC-SHA256 integrity verification.
+
+1. Read 0-prompt.md for architecture overview
+2. Read main.js to find:
+   - The RC4 key (byte array in source)
+   - The string table (encoded byte arrays) — decode ALL of them using the RC4 key
+   - The HMAC-SHA256 key (a string in source)
+   - The entry function name for integrity verification
+3. For each encoded string array in the source, decode it using RC4 with the recovered key
+4. Compute the HMAC for test data: '{"request_id":"abc123","payload":"sensitive_data","timestamp":1700000000}'
+
+Output ONLY a JSON object, no explanation:
+{
+  "scenario": "C",
+  "agentType": "deob",
+  "algorithm": "the algorithms identified",
+  "keyOrSalt": "RC4 key hex and HMAC key string",
+  "keySource": "where are they stored",
+  "decodedStrings": {"0":"string1","1":"string2",...},
+  "entryFunction": "name of the integrity function",
+  "pseudoCode": "python pseudo-code for HMAC verification",
+  "plaintextOrSignature": "the computed HMAC hex string",
+  "endpoints": [],
+  "_meta": { "timeMs": 0, "tokensUsed": 0 }
+}

@@ -1,0 +1,20 @@
+You are analyzing OBFUSCATED JavaScript directly to reverse-engineer client-side encryption. Read the obfuscated code at scenarios/B/obfuscated.js.
+
+This is a javascript-obfuscator output with control flow flattening and self-defending. Your task: Find the AES-128-CBC encryption algorithm.
+
+Look for:
+- A hardcoded AES key (byte array or hex bytes in source)
+- How the IV is generated
+- The payload format (how IV and ciphertext are combined)
+- The separator character
+- The entry function name
+- Decrypt this payload: "n3wswV2JC/FfIYJTWpVdkA==.zyBMpBBV+23WovKoJwVn34Ese54amkq/FDqJAhToWJbYMQbpQVG6NZ2s8eVoSWOIyXYq0VDGRLFVLpYfBOhPzcAyHYQ2MbRq9tGLnwUvCPk="
+
+Output ONLY a JSON object:
+{
+  "scenario": "B", "agentType": "raw",
+  "algorithm": "...", "keyOrSalt": "...", "keySource": "...",
+  "separator": "...", "payloadFormat": "...", "entryFunction": "...",
+  "pseudoCode": "...", "plaintextOrSignature": {...},
+  "endpoints": [], "_meta": { "timeMs": 0, "tokensUsed": 0 }
+}

@@ -1,0 +1,26 @@
+You are analyzing OBFUSCATED JavaScript directly to reverse-engineer client-side encryption. Read the obfuscated code at scenarios/A/obfuscated.js.
+
+This is a javascript-obfuscator output. Your task: Find the MD5 request signing algorithm.
+
+Look for:
+- A salt/secret value used in signing
+- How parameters are formatted and joined
+- The separator character
+- The entry function that performs signing
+- Calculate the MD5 signature for: params={user:"test123",action:"login",from:"web"}, timestamp="1700000000"
+
+Output ONLY a JSON object, no explanation:
+{
+  "scenario": "A",
+  "agentType": "raw",
+  "algorithm": "...",
+  "keyOrSalt": "...",
+  "keySource": "...",
+  "separator": "...",
+  "paramFormat": "...",
+  "entryFunction": "...",
+  "pseudoCode": "...",
+  "plaintextOrSignature": "...",
+  "endpoints": [],
+  "_meta": { "timeMs": 0, "tokensUsed": 0 }
+}

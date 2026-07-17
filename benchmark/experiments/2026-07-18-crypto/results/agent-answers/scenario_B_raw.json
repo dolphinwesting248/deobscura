@@ -1,0 +1,14 @@
+{
+  "scenario": "B",
+  "agentType": "raw",
+  "algorithm": "XOR-CBC (custom CBC mode built from XOR with FIPS-197 AES-128 test key)",
+  "keyOrSalt": "2b7e151628aed2a6abf7158809cf4f3c",
+  "keySource": "hardcoded byte array in source code",
+  "separator": ".",
+  "payloadFormat": "base64(IV) + '.' + base64(ciphertext)",
+  "entryFunction": "encryptPayload",
+  "pseudoCode": "def decrypt(payload): iv_b64, ct_b64 = payload.split('.'); iv = base64decode(iv_b64); ct = base64decode(ct_b64); key = [0x2b,0x7e,...]; ...",
+  "plaintextOrSignature": {"user":"test_user","action":"purchase","amount":99.99,"currency":"CNY"},
+  "endpoints": [],
+  "_meta": { "timeMs": 140637, "tokensUsed": 36033 }
+}

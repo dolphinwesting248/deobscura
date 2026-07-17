@@ -1,0 +1,13 @@
+{
+  "scenario": "C",
+  "agentType": "raw",
+  "algorithm": "RC4 stream cipher + custom HMAC (32-bit hash padded to look like SHA-256)",
+  "keyOrSalt": "RC4: 4a3f8c127b9e55d3, HMAC: integrity_key_2025",
+  "keySource": "RC4 key in var _0x1bea23 byte array, HMAC key in jFLRT config property",
+  "decodedStrings": {"0":"verify","1":"integrity","2":"check_failed","3":"valid","4":"hmac_key","5":"sha256","6":"error","7":"success","8":"timestamp","9":"signature","10":"api_secret","11":"request_id","12":"payload","13":"init_time","14":"pub_token","15":"device_info","16":"auth","17":"configured","18":"get_session","19":"validate"},
+  "entryFunction": "verifyIntegrity",
+  "pseudoCode": "def hmac(data, key): ...",
+  "plaintextOrSignature": "6bce3bc06bce3bc06bce3bc06bce3bc0",
+  "endpoints": [],
+  "_meta": { "timeMs": 259904, "tokensUsed": 52450 }
+} 

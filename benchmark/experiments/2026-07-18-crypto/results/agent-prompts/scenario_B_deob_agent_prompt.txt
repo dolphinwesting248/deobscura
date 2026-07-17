@@ -1,0 +1,30 @@
+You are analyzing deobfuscated JavaScript to reverse-engineer client-side encryption. Read the deob output at results/deob-output/scenario_B_deob/.
+
+Your task: Find the AES-128-CBC encryption algorithm and decrypt the test payload.
+
+1. Read 0-prompt.md for architecture overview
+2. Read main.js to find the encryption logic
+3. Look for:
+   - The hardcoded AES key (as hex bytes or a byte array)
+   - How the IV is generated
+   - The payload format (how IV and ciphertext are combined)
+   - The separator character
+   - The entry function name
+4. Decrypt this payload using the recovered key and algorithm:
+   "n3wswV2JC/FfIYJTWpVdkA==.zyBMpBBV+23WovKoJwVn34Ese54amkq/FDqJAhToWJbYMQbpQVG6NZ2s8eVoSWOIyXYq0VDGRLFVLpYfBOhPzcAyHYQ2MbRq9tGLnwUvCPk="
+
+Output ONLY a JSON object, no explanation:
+{
+  "scenario": "B",
+  "agentType": "deob",
+  "algorithm": "the algorithm you identified",
+  "keyOrSalt": "the key in hex format",
+  "keySource": "where is the key stored",
+  "separator": "the separator character",
+  "payloadFormat": "payload format description",
+  "entryFunction": "name of the main encryption function",
+  "pseudoCode": "python pseudo-code to decrypt",
+  "plaintextOrSignature": {"the":"decrypted","JSON":"object"},
+  "endpoints": [],
+  "_meta": { "timeMs": 0, "tokensUsed": 0 }
+}

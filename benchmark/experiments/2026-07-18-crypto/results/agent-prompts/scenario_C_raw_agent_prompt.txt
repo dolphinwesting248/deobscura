@@ -1,0 +1,20 @@
+You are analyzing OBFUSCATED JavaScript directly to reverse-engineer client-side encryption. Read the obfuscated code at scenarios/C/obfuscated.js.
+
+This is a javascript-obfuscator output with ALL options enabled (RC4 string array, control flow flattening, dead code, self-defending, debug protection). Your task: Find the RC4 string decoder and HMAC-SHA256 integrity verification.
+
+Look for:
+- An RC4 key (byte array in source)
+- Encoded string arrays — decode them using the RC4 key
+- An HMAC-SHA256 key (string in source)
+- The entry function for integrity verification
+- Compute the HMAC for test data: '{"request_id":"abc123","payload":"sensitive_data","timestamp":1700000000}'
+
+Output ONLY a JSON object:
+{
+  "scenario": "C", "agentType": "raw",
+  "algorithm": "...", "keyOrSalt": "...", "keySource": "...",
+  "decodedStrings": {"0":"...","1":"...",...},
+  "entryFunction": "...", "pseudoCode": "...",
+  "plaintextOrSignature": "...",
+  "endpoints": [], "_meta": { "timeMs": 0, "tokensUsed": 0 }
+}

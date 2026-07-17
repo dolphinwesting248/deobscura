@@ -1,0 +1,30 @@
+You are analyzing deobfuscated JavaScript to reverse-engineer client-side encryption. Read the deob output at results/deob-output/scenario_A_deob/.
+
+Your task: Find the MD5 request signing algorithm implemented in this code.
+
+1. Read 0-prompt.md for architecture overview
+2. Read main.js to find the encryption logic
+3. Look for:
+   - The salt/secret value used in signing
+   - The parameter format (how are params joined?)
+   - The separator character
+   - The entry function name
+4. Calculate the expected signature for these inputs:
+   - params: { user: "test123", action: "login", from: "web" }
+   - timestamp: "1700000000"
+
+Output ONLY a JSON object, no explanation:
+{
+  "scenario": "A",
+  "agentType": "deob",
+  "algorithm": "the algorithm you identified",
+  "keyOrSalt": "the salt or key value",
+  "keySource": "where is it stored",
+  "separator": "the separator character",
+  "paramFormat": "how parameters are formatted",
+  "entryFunction": "name of the main signing function",
+  "pseudoCode": "python pseudo-code for the signing function",
+  "plaintextOrSignature": "the computed signature hex string",
+  "endpoints": [],
+  "_meta": { "timeMs": 0, "tokensUsed": 0 }
+}
