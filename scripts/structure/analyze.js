@@ -362,7 +362,9 @@ function analyzeStructureImpl(filepath, opts) {
       if (callerIdx !== undefined && !fns[callerIdx].calls.includes(node.callee.name)) {
         fns[callerIdx].calls.push(node.callee.name);
       }
-      fns[calleeIdx].calledBy.push(callerName);
+      if (!fns[calleeIdx].calledBy.includes(callerName)) {
+        fns[calleeIdx].calledBy.push(callerName);
+      }
     }
     for (const k of Object.keys(node)) {
       if (SKIP_KEYS.has(k)) continue;
