@@ -26,12 +26,9 @@ function main({ input, output, split, agent, banner, compact } = {}) {
   resetInlineNames();
   const pipelineStart = Date.now();
 
-  // Agent mode: auto-configures compact + minimal banners for LLM consumption
+  // Compact mode: post-process instead of Babel built-in (avoids syntax bugs)
   const isAgent = !!agent;
   const useCompact = compact != null ? !!compact : isAgent;
-  const generateOpts = useCompact
-    ? { ...DEFAULT_GENERATE_OPTS, compact: true, comments: true }
-    : DEFAULT_GENERATE_OPTS;
 
   console.log("Reading file...");
   const code = fs.readFileSync(input, "utf-8");
@@ -183,9 +180,9 @@ function main({ input, output, split, agent, banner, compact } = {}) {
   // ==================== Output ====================
   let result;
   if (split) {
-    result = writeSplitOutput(ast, output, code, generateOpts);
+    result = writeSplitOutput(ast, output, code, useCompact);
   } else {
-    result = writeSingleOutput(ast, output, code, generateOpts);
+    result = writeSingleOutput(ast, output, code, useCompact);
   }
   const totalMs = Date.now() - pipelineStart;
   const speed = (code.length / 1024 / (totalMs / 1000)).toFixed(0);
@@ -193,7 +190,7 @@ function main({ input, output, split, agent, banner, compact } = {}) {
   return result;
 }
 
-function writeSingleOutput(ast, output, code, generateOpts) {
+function writeSingleOutput(ast, output, code, useCompact) {
   // output is always a directory; write deobfuscated code as main.js inside it
   const outDir = output;
   if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true });
@@ -202,7 +199,17 @@ function writeSingleOutput(ast, output, code, generateOpts) {
   // Safety: filter out any non-statement nodes from program body
   ast.program.body = ast.program.body.filter((n) => n && typeof n.type === "string" && n.type !== "CommentLine" && n.type !== "CommentBlock");
 
-  const generated = generate(ast, generateOpts).code;
+  let generated = generate(ast, DEFAULT_GENERATE_OPTS).code;
+
+  // Compact mode: post-process to reduce whitespace without breaking syntax
+  if (useCompact) {
+    // Remove blank lines and collapse multiple spaces (preserve string content)
+    generated = generated
+      .split("\n")
+      .filter((l) => l.trim() !== "")
+      .map((l) => l.replace(/^ +/, (m) => m.length > 1 ? " ".repeat(Math.max(1, Math.floor(m.length / 2))) : m))
+      .join("\n");
+  }
 
   const mainFile = path.join(outDir, OUTPUT_FILES.MAIN);
   fs.writeFileSync(mainFile, generated, "utf-8");
@@ -216,7 +223,7 @@ function writeSingleOutput(ast, output, code, generateOpts) {
   return generated;
 }
 
-function writeSplitOutput(ast, output, code, generateOpts) {
+function writeSplitOutput(ast, output, code, useCompact) {
   console.log("Splitting into per-function files...");
 
   // Ensure output directory
@@ -241,7 +248,7 @@ function writeSplitOutput(ast, output, code, generateOpts) {
 
   // --- Phase 1: generate ALL function codes at once ---
   // Write main.js with full combined output (used by reports)
-  fs.writeFileSync(path.join(outDir, "main.js"), generate(ast, generateOpts || DEFAULT_GENERATE_OPTS).code, "utf-8");
+  fs.writeFileSync(path.join(outDir, "main.js"), generate(ast, DEFAULT_GENERATE_OPTS).code, "utf-8");
 
   // Generate each function separately but without prettier — batch format at end
   const generatedFns = new Map();
