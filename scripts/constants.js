@@ -69,7 +69,7 @@ const ALERT_PATTERNS = [
   { label: "Extension API", regex: /\b(?:chrome\.(?:storage|runtime|tabs|cookies|webRequest|scripting|downloads|notifications|alarms)|browser\.(?:storage|runtime|tabs|scripting))\b/gi, severity: "high" },
   { label: "React XSS", regex: /\b(?:dangerouslySetInnerHTML|__html|createDangerousString)\b/gi, severity: "high" },
   { label: "Prototype Pollute", regex: /\b(?:__proto__|constructor\s*\[|prototype\s*\[|constructor\.prototype)\b/gi, severity: "high" },
-  { label: "Fingerprint", regex: /\b(?:toDataURL|getParameter|WEBGL_debug_renderer_info|canvas.*hash|fingerprint|fp_risk|buvid_fp)\b/gi, severity: "high" },
+  { label: "Fingerprint", regex: /\b(?:toDataURL|getParameter|WEBGL_debug_renderer_info|canvas.*hash|fingerprint|fp_risk|buvid_fp|navigator\.(?:platform|plugins|languages|hardwareConcurrency|deviceMemory|userAgent)|screen\.(?:width|height|colorDepth|avail)|webdriver|phantom|selenium|puppeteer|font\w*detect|audio\w*context.*create\w*Analyser)\b/gi, severity: "high" },
   { label: "Cookie", regex: /\b(?:document\.cookie|\.cookie\b.*=|cookieEnabled|setCookie|getCookie)\b/gi, severity: "medium" },
   { label: "Anti-Tamper", regex: /\bdebugger\b/gi, severity: "high" },
 ];
@@ -249,6 +249,10 @@ const DOMAIN_RULES = [
   { tag: "Auth Handler", regex: /\b(?:login|authenticate|password|credential|token|session|hashPassword|mfaVerify|OTP|2FA)\b/i, minCount: 3 },
   { tag: "Data Pipeline", regex: /\b(?:JSON\.parse|Array\.isArray|\.filter\s*\(|\.map\s*\(|\.forEach\s*\(|\.sort\s*\(|\.group\s*\(|transform|aggregate|statistics)\b/ },
   { tag: "CRUD API", regex: /\b(?:POST|GET|PUT|DELETE)\b.*\b(?:fetch|axios|xhr|sendRequest)\b|\b(?:fetch|axios)\b.*\b(?:POST|GET|PUT)\b/ },
+  // Security & anti-bot
+  { tag: "Bot Detection", regex: /\b(?:baxia|webdriver|phantom|selenium|puppeteer|playwright|headless|__nightmare|_phantom|callPhantom|_Selenium_IDE_Recorder|spf(?:Request|API)|bot\s*detect|is(?:Bot|Spider|Crawler))\b/i },
+  { tag: "Fingerprinting", regex: /\b(?:fingerprint|buvid_fp|fp_risk|canvas.*(?:hash|fingerprint)|webgl.*(?:render|debug)|audio.*fingerprint|font.*(?:detect|fingerprint)|navigator\.(?:platform|language|hardwareConcurrency|deviceMemory|plugins|languages|userAgent)|screen\.(?:width|height|colorDepth|avail)|timezone.*offset|doNotTrack)\b/i },
+  { tag: "Risk Control", regex: /\b(?:risk|fraud|disposal)\w*\b/gi, minCount: 10 },
 ];
 
 // ---- Function Category Rules (for categorizeFn) ----

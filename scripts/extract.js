@@ -7,6 +7,21 @@ const { createSubFn, safeParam } = require("./emit");
 const { isIIFE, descIIFE, clone, hasBail, hasSuperCall, hasReturn, describeBody } = require("./ast-utils");
 const { collectDefined, getExternalRefs } = require("./scope");
 
+// ---- shouldSkipBody: don't extract trivial single-statement blocks without nested control flow ----
+function hasNestedControlFlow(stmts) {
+  for (const s of stmts) {
+    if (t.isIfStatement(s) || t.isForStatement(s) || t.isWhileStatement(s) ||
+        t.isTryStatement(s) || t.isSwitchStatement(s) || t.isDoWhileStatement(s) ||
+        t.isForInStatement(s) || t.isForOfStatement(s)) return true;
+  }
+  return false;
+}
+function shouldSkipBody(stmts) {
+  if (!stmts || stmts.length > 1) return false;
+  if (stmts.length === 0) return true;
+  return !hasNestedControlFlow(stmts);
+}
+
 // ---- processBody: core transformation at statement level ----
 function processBody(stmts, parentName, counter, processedBodiesRef) {
   const newBody = [];
@@ -74,6 +89,7 @@ function extractIIFE(stmt, parentName, seq) {
 }
 
 function extractTryCatch(stmt, parentName, seq) {
+  if (shouldSkipBody(stmt.block.body)) return null;
   if (hasBail(stmt.block) || hasSuperCall(stmt.block)) return null;
   if (stmt.handler && (hasBail(stmt.handler.body) || hasSuperCall(stmt.handler.body))) return null;
 
@@ -110,6 +126,7 @@ function extractTryCatch(stmt, parentName, seq) {
 function extractLoop(stmt, parentName, seq) {
   const body = stmt.body;
   if (!t.isBlockStatement(body) || body.body.length === 0) return null;
+  if (shouldSkipBody(body.body)) return null;
   if (hasBail(body)) return null;
 
   const name = subName(parentName, seq, describeBody(body.body), body);
@@ -133,6 +150,7 @@ function extractLoop(stmt, parentName, seq) {
 function extractIfElse(stmt, parentName, seq) {
   const subFns = [];
   const cBlock = t.isBlockStatement(stmt.consequent) ? stmt.consequent : t.blockStatement([stmt.consequent]);
+  if (shouldSkipBody(cBlock.body)) return null;
   if (hasBail(cBlock) || hasSuperCall(cBlock)) return null;
   const cStmts = cBlock.body;
   if (cStmts.length === 0) return null;
@@ -184,6 +202,7 @@ function extractSwitch(stmt, parentName, seq) {
     ci++;
     if (c.consequent.length === 0) { newCases.push(t.switchCase(clone(c.test), [])); continue; }
     if (hasBail(c)) { newCases.push(clone(c)); continue; }
+    if (shouldSkipBody(c.consequent)) { newCases.push(clone(c)); continue; }
     const cName = subName(parentName, `${seq}_${String(ci).padStart(2, "0")}`, "case", c);
     const defined = collectDefined(c.consequent);
     const refs = getExternalRefs(c, defined);
