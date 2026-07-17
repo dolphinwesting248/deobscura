@@ -26,8 +26,11 @@ module.exports = {
   metrics: false,                 // HTML readability report
   md: true,                       // 0-prompt.md + 1-structure.md
   index: true,                    // 2-index.txt
+  agent: false,                   // LLM agent mode: compact, minimal banners
   tier: 3,                        // 1=alerts+hotspots, 2=+callees, 3=all
-  fold: false,                    // collapse mechanical functions to comments
+  fold: true,                     // collapse mechanical functions to comments
+  banner: true,                   // true=verbose, false=minimal metadata
+  compact: false,                 // compact code generation
   denoise: [                      // alert denoising rules (optional)
     { match: "regex-source", label: "Label", severity: "low" },
   ],
@@ -42,8 +45,11 @@ module.exports = {
 | `metrics` | `boolean` | `false` | Generate HTML before/after report |
 | `md` | `boolean` | `true` | Generate 0-prompt.md + 1-structure.md |
 | `index` | `boolean` | `true` | Generate 2-index.txt |
+| `agent` | `boolean` | `false` | LLM agent mode: compact output, minimal banners, auto fold+tier |
 | `tier` | `1 \| 2 \| 3` | `3` | Output filtering level |
-| `fold` | `boolean` | `true` | Collapse mechanical functions to comments |
+| `fold` | `boolean` | `true` | Collapse mechanical functions to comments (works at all tiers) |
+| `banner` | `boolean` | `true` | true=verbose metadata banner, false=minimal (name + alerts) |
+| `compact` | `boolean` | `false` | Compact code generation (less whitespace) |
 | `denoise` | `DenoiseRule[]` | defaults | Alert denoising rules |
 
 See [tier-and-fold.md](./docs/tier-and-fold.md) for more details for `tier` and `fold`.

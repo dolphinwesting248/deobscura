@@ -26,8 +26,14 @@ export interface DeobConfig {
   index?: boolean;
   /** Output tier: 1=alerts+hotspots, 2=+callees, 3=all */
   tier?: 1 | 2 | 3;
-  /** Collapse mechanical functions (polyfill/pure-compute/forward) */
+  /** Collapse mechanical functions (polyfill/pure-compute/forward). Works at all tiers. */
   fold?: boolean;
   /** Alert denoising rules. Empty array = no denoising. Omit = use defaults. */
   denoise?: DenoiseRule[];
+  /** LLM agent mode: compact output, minimal banners, auto fold + tier */
+  agent?: boolean;
+  /** Metadata banner verbosity: true=verbose (default), false=minimal (name + alerts only) */
+  banner?: boolean;
+  /** Compact code generation (less whitespace). Agent mode defaults to true. */
+  compact?: boolean;
 }
