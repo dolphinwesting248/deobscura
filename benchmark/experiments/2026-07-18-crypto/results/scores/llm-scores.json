@@ -1,0 +1,50 @@
+{
+  "A": {
+    "deob": {
+      "Algorithm": 1,
+      "Key": 1,
+      "Parameters": 1,
+      "PseudoCode": 1,
+      "Result": 1
+    },
+    "raw": {
+      "Algorithm": 0.8,
+      "Key": 1,
+      "Parameters": 1,
+      "PseudoCode": 0.8,
+      "Result": 0
+    }
+  },
+  "B": {
+    "deob": {
+      "Algorithm": 0.9,
+      "Key": 0.8,
+      "Parameters": 0.8,
+      "PseudoCode": 0.9,
+      "Result": 1
+    },
+    "raw": {
+      "Algorithm": 0.9,
+      "Key": 1,
+      "Parameters": 1,
+      "PseudoCode": 0.9,
+      "Result": 1
+    }
+  },
+  "C": {
+    "deob": {
+      "Algorithm": 1,
+      "Key": 1,
+      "Parameters": 1,
+      "PseudoCode": 1,
+      "Result": 1
+    },
+    "raw": {
+      "Algorithm": 0.9,
+      "Key": 1,
+      "Parameters": 1,
+      "PseudoCode": 0.9,
+      "Result": 1
+    }
+  }
+}

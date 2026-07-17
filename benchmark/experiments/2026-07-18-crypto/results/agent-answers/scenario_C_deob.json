@@ -1,0 +1,13 @@
+{
+  "scenario": "C",
+  "agentType": "deob",
+  "algorithm": "RC4 stream cipher for string encoding + HMAC-SHA256 (custom 32-bit hash repeated 4x)",
+  "keyOrSalt": "RC4: 4a3f8c127b9e55d3, HMAC: integrity_key_2025",
+  "keySource": "RC4 key in var RC4_KEY byte array, HMAC key in HMAC_KEY string",
+  "decodedStrings": {"0":"verify","1":"integrity","2":"check_failed","3":"valid","4":"hmac_key","5":"sha256","6":"error","7":"success","8":"timestamp","9":"signature","10":"api_secret","11":"request_id","12":"payload","13":"init_time","14":"pub_token","15":"device_info","16":"auth","17":"configured","18":"get_session","19":"validate"},
+  "entryFunction": "verifyIntegrity",
+  "pseudoCode": "def simple_hash(s): h=0; for c in s: o=ord(c); h=((h<<5)-h+o)&0xFFFFFFFF; h=((h<<7)^((h>>25)+o*0x9e3779b1))&0xFFFFFFFF; x=format(abs(h),'08x'); return x*4\n\ndef hmac_sha256(data,key): ...",
+  "plaintextOrSignature": "6bce3bc06bce3bc06bce3bc06bce3bc0",
+  "endpoints": [],
+  "_meta": { "timeMs": 488499, "tokensUsed": 76336 }
+}

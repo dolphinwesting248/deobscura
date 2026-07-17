@@ -1,0 +1,14 @@
+{
+  "scenario": "A",
+  "agentType": "raw",
+  "algorithm": "MD5 (non-standard padding)",
+  "keyOrSalt": "x7k9m_2025",
+  "keySource": "Hardcoded in CONFIG.API_SALT",
+  "separator": "|",
+  "paramFormat": "Sort param keys alphabetically, each as key=value, joined by &",
+  "entryFunction": "signRequest",
+  "pseudoCode": "function signRequest(params, timestamp): keys = Object.keys(params).sort(); paramStr = keys.map(k => k + '=' + params[k]).join('&'); return md5(paramStr + '|' + timestamp + '|' + 'x7k9m_2025')",
+  "plaintextOrSignature": "e6bffa9154d50e98a548c27f0586bf17",
+  "endpoints": [],
+  "_meta": { "timeMs": 715528, "tokensUsed": 65174 }
+}

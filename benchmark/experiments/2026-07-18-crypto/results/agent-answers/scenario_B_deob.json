@@ -1,0 +1,14 @@
+{
+  "scenario": "B",
+  "agentType": "deob",
+  "algorithm": "XOR-CBC (custom XOR-based block cipher in CBC mode, not real AES)",
+  "keyOrSalt": "2b7e151628aed2a6abf7158809cf4f3c",
+  "keySource": "Hardcoded 16-byte array in source code",
+  "separator": ".",
+  "payloadFormat": "base64(IV).base64(ciphertext)",
+  "entryFunction": "encryptPayload",
+  "pseudoCode": "def decrypt(payload): iv_b64, ct_b64 = payload.split('.'); iv = base64decode(iv_b64); ct = base64decode(ct_b64); key = bytes.fromhex('2b7e151628aed2a6abf7158809cf4f3c'); ...",
+  "plaintextOrSignature": {"user":"test_user","action":"purchase","amount":99.99,"currency":"CNY"},
+  "endpoints": [],
+  "_meta": { "timeMs": 658059, "tokensUsed": 58884 }
+}

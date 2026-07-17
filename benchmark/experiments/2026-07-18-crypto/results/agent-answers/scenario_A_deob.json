@@ -1,0 +1,14 @@
+{
+  "scenario": "A",
+  "agentType": "deob",
+  "algorithm": "MD5",
+  "keyOrSalt": "x7k9m_2025",
+  "keySource": "Hardcoded in CONFIG.API_SALT, decoded from obfuscated string table",
+  "separator": "|",
+  "paramFormat": "sorted keys joined by & with key=value pairs, then |timestamp|salt appended",
+  "entryFunction": "signRequest",
+  "pseudoCode": "def sign_request(params, timestamp): keys = sorted(params.keys()); param_str = '&'.join(f'{k}={params[k]}' for k in keys); return md5(f'{param_str}|{timestamp}|{SALT}').hexdigest()",
+  "plaintextOrSignature": "f35292a6eb1648cd1099d06e9606d6df",
+  "endpoints": [],
+  "_meta": { "timeMs": 1143628, "tokensUsed": 75410 }
+}

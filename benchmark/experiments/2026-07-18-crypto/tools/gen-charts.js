@@ -15,7 +15,8 @@ if (!fs.existsSync(SCORES_PATH)) {
 const scores = JSON.parse(fs.readFileSync(SCORES_PATH, "utf-8"));
 fs.mkdirSync(IMGS, { recursive: true });
 
-const DIM_LABELS = ["Algorithm", "Key", "Parameters", "PseudoCode", "Result", "Token", "Time", "Entry"];
+const DIM_KEYS = ["Algorithm", "Key", "Parameters", "PseudoCode", "Result", "token", "time", "entry"];
+const DIM_LABELS = ["Algorithm", "Key", "Params", "Pseudo", "Result", "Token", "Time", "Entry"];
 const W = 400, H = 300;
 
 // ---- Bar chart: total scores deob vs raw ----
@@ -66,8 +67,8 @@ function svgRadar(scenario) {
   // Deob polygon
   const deobPts = [];
   for (let i = 0; i < n; i++) {
-    const dim = DIM_LABELS[i];
-    const val = s.deob.dimensionScores[dim.toLowerCase()] || s.deob.dimensionScores[dim] || 0;
+    const dimKey = DIM_KEYS[i];
+    const val = s.deob.dimensions[dimKey] || 0;
     const a = -Math.PI / 2 + i * angleStep;
     deobPts.push(`${cx + Math.cos(a) * r * val},${cy + Math.sin(a) * r * val}`);
   }
@@ -76,8 +77,8 @@ function svgRadar(scenario) {
   // Raw polygon
   const rawPts = [];
   for (let i = 0; i < n; i++) {
-    const dim = DIM_LABELS[i];
-    const val = s.raw.dimensionScores[dim.toLowerCase()] || s.raw.dimensionScores[dim] || 0;
+    const rk = DIM_KEYS[i];
+    const val = s.raw.dimensions[rk] || 0;
     const a = -Math.PI / 2 + i * angleStep;
     rawPts.push(`${cx + Math.cos(a) * r * val},${cy + Math.sin(a) * r * val}`);
   }

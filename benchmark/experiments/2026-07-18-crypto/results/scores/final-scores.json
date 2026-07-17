@@ -1,0 +1,86 @@
+{
+  "A": {
+    "deob": {
+      "dimensions": {
+        "Algorithm": 1,
+        "Key": 1,
+        "Parameters": 1,
+        "PseudoCode": 1,
+        "Result": 1,
+        "time": 0.3848671117431781,
+        "token": 0.4635947191714562,
+        "entry": 1
+      },
+      "total": 0.9424230915457318
+    },
+    "raw": {
+      "dimensions": {
+        "Algorithm": 0.8,
+        "Key": 1,
+        "Parameters": 1,
+        "PseudoCode": 0.8,
+        "Result": 0,
+        "time": 0.6151328882568219,
+        "token": 0.5364052808285438,
+        "entry": 1
+      },
+      "total": 0.7975769084542685
+    }
+  },
+  "B": {
+    "deob": {
+      "dimensions": {
+        "Algorithm": 0.9,
+        "Key": 0.8,
+        "Parameters": 0.8,
+        "PseudoCode": 0.9,
+        "Result": 1,
+        "time": 0.1760832657231287,
+        "token": 0.379626410442808,
+        "entry": 1
+      },
+      "total": 0.8077854838082968
+    },
+    "raw": {
+      "dimensions": {
+        "Algorithm": 0.9,
+        "Key": 1,
+        "Parameters": 1,
+        "PseudoCode": 0.9,
+        "Result": 1,
+        "time": 0.8239167342768713,
+        "token": 0.620373589557192,
+        "entry": 1
+      },
+      "total": 0.9422145161917033
+    }
+  },
+  "C": {
+    "deob": {
+      "dimensions": {
+        "Algorithm": 1,
+        "Key": 1,
+        "Parameters": 1,
+        "PseudoCode": 1,
+        "Result": 1,
+        "time": 0.3472781375809557,
+        "token": 0.4072647648036277,
+        "entry": 1
+      },
+      "total": 0.9377271451192292
+    },
+    "raw": {
+      "dimensions": {
+        "Algorithm": 0.9,
+        "Key": 1,
+        "Parameters": 1,
+        "PseudoCode": 0.9,
+        "Result": 1,
+        "time": 0.6527218624190443,
+        "token": 0.5927352351963723,
+        "entry": 1
+      },
+      "total": 0.9322728548807709
+    }
+  }
+}
