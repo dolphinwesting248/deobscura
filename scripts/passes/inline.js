@@ -184,42 +184,32 @@ function inlineArithmeticWrappers(ast) {
   let count = 0;
   const wrappers = new Map(); // name -> { params, body (expression) }
 
-  // Phase 1: find single-return-expression wrappers (iterative)
-  const findStack = [ast];
-  while (findStack.length > 0) {
-    const node = findStack.pop();
-    if (!node || typeof node !== "object") continue;
-    if (t.isFunctionDeclaration(node) && node.id) {
-      const body = node.body.body;
-      if (body.length === 1 && t.isReturnStatement(body[0]) && body[0].argument) {
-        const expr = body[0].argument;
-        const paramNames = new Set(node.params.filter(p => t.isIdentifier(p)).map(p => p.name));
-        if (paramNames.size > 0 && paramNames.size <= 3) {
-          // Check if expr uses only params (iterative)
-          const idents = [];
-          const idStack = [expr];
-          while (idStack.length > 0) {
-            const n = idStack.pop();
-            if (!n || typeof n !== "object") continue;
-            if (t.isIdentifier(n)) { idents.push(n.name); continue; }
-            for (const k of Object.keys(n)) {
-              if (k === "start" || k === "end" || k === "loc") continue;
-              const v = n[k];
-              if (v && typeof v.type === "string") idStack.push(v);
-            }
-          }
-          const usesOnlyParams = idents.every(id => paramNames.has(id));
-          if (usesOnlyParams && idents.length <= 6) {
-            wrappers.set(node.id.name, { params: node.params.map(p => clone(p)), expr: clone(expr) });
+  // Phase 1: find wrapper functions at program level only (fast path)
+  for (const stmt of ast.program.body) {
+    if (!t.isFunctionDeclaration(stmt) || !stmt.id) continue;
+    const node = stmt;
+    const body = node.body.body;
+    if (body.length === 1 && t.isReturnStatement(body[0]) && body[0].argument) {
+      const expr = body[0].argument;
+      const paramNames = new Set(node.params.filter(p => t.isIdentifier(p)).map(p => p.name));
+      if (paramNames.size > 0 && paramNames.size <= 3) {
+        const idents = [];
+        const idStack = [expr];
+        while (idStack.length > 0) {
+          const n = idStack.pop();
+          if (!n || typeof n !== "object") continue;
+          if (t.isIdentifier(n)) { idents.push(n.name); continue; }
+          for (const k of Object.keys(n)) {
+            if (k === "start" || k === "end" || k === "loc") continue;
+            const v = n[k];
+            if (v && typeof v.type === "string") idStack.push(v);
           }
         }
+        const usesOnlyParams = idents.every(id => paramNames.has(id));
+        if (usesOnlyParams && idents.length <= 6) {
+          wrappers.set(node.id.name, { params: node.params.map(p => clone(p)), expr: clone(expr) });
+        }
       }
-    }
-    for (const k of Object.keys(node)) {
-      if (k === "start" || k === "end" || k === "loc") continue;
-      const v = node[k];
-      if (Array.isArray(v)) { for (let i = v.length - 1; i >= 0; i--) if (v[i] && typeof v[i] === "object") findStack.push(v[i]); }
-      else if (v && typeof v.type === "string") findStack.push(v);
     }
   }
 

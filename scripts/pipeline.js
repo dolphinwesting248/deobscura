@@ -134,9 +134,9 @@ function main({ input, output, split } = {}) {
   inlinePureWrappers(ast);
   console.log(`  ${c.dim}Done in ${Date.now() - t13}ms${c.reset}`);
 
-  // Step 13b: disabled — too slow on large files (142KB+), needs optimization
-  // console.log("Step 13b: Inlining arithmetic wrappers...");
-  // inlineArithmeticWrappers(ast);
+  // Step 13b: collapse arithmetic wrappers (optimized: program-level scan only)
+  console.log(`${c.cyan}Step 13b:${c.reset} Inlining arithmetic wrappers...`);
+  inlineArithmeticWrappers(ast);
 
   console.log(`${c.cyan}Step 14:${c.reset} Sorting functions by call tree...`);
   const t14 = Date.now();
