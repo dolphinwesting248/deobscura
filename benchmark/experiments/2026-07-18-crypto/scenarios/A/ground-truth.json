@@ -1,0 +1,21 @@
+{
+  "scenario": "A",
+  "difficulty": "medium",
+  "algorithm": "MD5",
+  "description": "MD5 request signing with hidden salt and separator",
+  "encryption": {
+    "algorithm": "MD5",
+    "salt": "x7k9m_2025",
+    "separator": "|",
+    "paramFormat": "key=value pairs sorted alphabetically, joined by &",
+    "signStringFormat": "{sorted_params}&{separator}{timestamp}{separator}{salt}"
+  },
+  "verification": {
+    "input": {
+      "params": { "user": "test123", "action": "login", "from": "web" },
+      "timestamp": "1700000000"
+    },
+    "rawString": "action=login&from=web&user=test123|1700000000|x7k9m_2025",
+    "expectedSignature": "f35292a6eb1648cd1099d06e9606d6df"
+  }
+}

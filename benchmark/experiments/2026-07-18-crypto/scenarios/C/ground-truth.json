@@ -1,0 +1,33 @@
+{
+  "scenario": "C",
+  "difficulty": "extreme",
+  "algorithm": "RC4 + HMAC-SHA256",
+  "description": "RC4-encoded string table + HMAC-SHA256 integrity verification",
+  "encryption": {
+    "rc4": {
+      "keyHex": "4a3f8c127b9e55d3",
+      "keyLength": 64,
+      "description": "RC4 stream cipher used to encode string constants"
+    },
+    "hmac": {
+      "algorithm": "HMAC-SHA256",
+      "key": "integrity_key_2025",
+      "description": "HMAC key used for data integrity verification"
+    },
+    "stringTable": {
+      "description": "20 RC4-encoded strings, decoded by LLM",
+      "decoded": {
+        "0": "verify", "1": "integrity", "2": "check_failed", "3": "valid",
+        "4": "hmac_key", "5": "sha256", "6": "error", "7": "success",
+        "8": "timestamp", "9": "signature", "10": "api_secret",
+        "11": "request_id", "12": "payload", "13": "init_time",
+        "14": "pub_token", "15": "device_info", "16": "auth",
+        "17": "configured", "18": "get_session", "19": "validate"
+      }
+    }
+  },
+  "verification": {
+    "testData": "{\"request_id\":\"abc123\",\"payload\":\"sensitive_data\",\"timestamp\":1700000000}",
+    "expectedHmac": "6bce3bc06bce3bc06bce3bc06bce3bc0"
+  }
+}

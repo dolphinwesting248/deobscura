@@ -1,0 +1,22 @@
+{
+  "scenario": "B",
+  "difficulty": "hard",
+  "algorithm": "AES-128-CBC",
+  "description": "AES-CBC data encryption with hardcoded key and random IV",
+  "encryption": {
+    "algorithm": "AES-128-CBC",
+    "keyHex": "2b7e151628aed2a6abf7158809cf4f3c",
+    "keySize": 128,
+    "mode": "CBC",
+    "ivSource": "random 16 bytes per encryption, prepended to ciphertext",
+    "padding": "PKCS#7",
+    "encoding": "base64",
+    "payloadFormat": "base64(iv).base64(ciphertext)",
+    "separator": ".",
+    "plaintextEncoding": "JSON.stringify then UTF-8"
+  },
+  "verification": {
+    "testPayload": "n3wswV2JC/FfIYJTWpVdkA==.zyBMpBBV+23WovKoJwVn34Ese54amkq/FDqJAhToWJbYMQbpQVG6NZ2s8eVoSWOIyXYq0VDGRLFVLpYfBOhPzcAyHYQ2MbRq9tGLnwUvCPk=",
+    "expectedPlaintext": { "user": "test_user", "action": "purchase", "amount": 99.99, "currency": "CNY" }
+  }
+}

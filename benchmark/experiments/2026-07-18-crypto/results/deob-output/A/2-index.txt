@@ -1,0 +1,88 @@
+# main.js · Function Index · 6 functions
+_Previous: 1-structure.md  →  **Now: 2-index.txt**  →  Jump to main.js by function name._
+
+## Sections
+entry     — entry point functions (no callers, start analysis here)
+alerts    — security patterns detected (URL, eval, fingerprint, etc.)
+hot       — most-called functions (highest caller count)
+lookup    — keyword → function name mapping
+trace     — longest call path through the code
+suspicious — functions with suspicious patterns
+flat      — control-flow flattened functions (while+switch)
+shared    — variables used by 2+ functions (⇒ = used by)
+fn/<cat>  — functions grouped by category (see CATEGORY_LABELS)
+
+## Function Entry Format
+name | Ss/Pp | cc=N | → callees ⇐ callers | closure: v1, v2 ; paramRoles ; [semTags] ; flags
+
+## Fields
+Ss/Pp       = S statements, P parameters
+cc=N        = cyclomatic complexity (branch density, higher = more branches)
+→ fn        = calls function fn
+⇐ fn        = called by function fn
+root        = entry point (no callers)
+closure: v  = captures variable v from outer scope (closure capture)
+
+## Parameter Roles (paramRoles)
+this=x      = parameter used as this context
+cb=x        = parameter called as callback function
+out=x       = parameter properties are assigned to
+arg=x       = ordinary argument
+ret=x       = used in return value construction
+
+## Semantic Tags [semTags]
+[returns value]        = function has a return value
+[returns via N paths]  = N distinct return paths
+[returns conditional]  = conditional return
+[returns str/prop]     = returns string / property
+[void, NS]             = no return value, N statements
+[callback-driven]      = parameters are called as callbacks
+[can throw]            = may throw exceptions
+[side-effects]         = has side effects (I/O, DOM, mutation)
+[config]               = configuration-related
+[calls → fn]           = directly invokes fn
+
+## Flags
+FLAT         = control-flow flattened (while+switch dispatcher)
+DATA         = heavy hex data (large constant arrays)
+[Label]      = security alert (see 1-structure.md)
+
+## Separators
+|  = field separator (name / size / cc / edges / extras)
+,  = list separator within a field (multiple callees, multiple roles)
+;  = extras separator (between closure, paramRoles, semTags, and flags)
+
+## entry
+a0_0x2cbd | cc=3 | → a0_0x4bc7, _S_a0_0x2cbd_04_if
+
+## hot
+a0_0x4bc7 ⇐ 2 callers
+_S_a0_0x2cbd_04_if ⇐ 1 callers
+
+## lookup
+program → _S_program_loop_body_l116, _S_program_declare_fn_l137
+declare → _S_program_declare_fn_l137
+loop → _S_program_loop_body_l116
+
+## trace
+a0_0x2cbd → a0_0x4bc7
+
+## shared
+a0_0x2cbd ⇒ a0_0x2cbd, _S_program_loop_body_l116, _S_a0_0x2cbd_04_if, _S_program_declare_fn_l137, _0x1bb109 +6 · 11 fns · const
+_0x2c41d4 ⇒ _0x56adb6, _0x417b01, _0x58cb2d, _0x258cac, _0x4599fb +4 · 9 fns · var
+_0x136049 ⇒ _S_program_declare_fn_l137, _0x5b3739, _0x4d5170, _0x32b9a6, _0x2b46be · 5 fns · var
+_0x3179c9 ⇒ _0x1bb109, _0x437b5f, _0x3abfff, _0x480804, _0x28647f · 5 fns · var
+_0x56adb6 ⇒ _0x58cb2d, _0x258cac, _0x4599fb, _0x3abfff, _0x5b3739 · 5 fns · const
+_0x1bb109 ⇒ _0x58cb2d, _0x258cac, _0x4599fb, _0x3abfff · 4 fns · const
+a0_0x4bc7 ⇒ a0_0x2cbd, a0_0x4bc7 · 2 fns · const, mut
+_0x32b9a6 ⇒ _0x2b46be, _S_program_declare_fn_l137 · 2 fns · const
+
+## fn/core  (2) — Core Functions
+a0_0x2cbd | 9S/2P | cc=3 | → a0_0x4bc7, _S_a0_0x2cbd_04_if root | out=_0x45b6b0 ; [returns arg]
+a0_0x4bc7 | 3S/0P | cc=1 | → a0_0x4bc7 ⇐ a0_0x2cbd, a0_0x4bc7 | self-modifying table-init ; [calls → a0_0x4bc7]
+
+## fn/obfuscation  (4) — Obfuscation Artifacts
+_S_program_loop_body_l116 | 3S/2P | cc=4 | cb=_0x2ad583 ; module-init ; [void, 3S; callback-driven]
+_S__0x56a3ce_0_fn | 5S/1P | cc=6 | cfg:this=_0x419269 ; [calls → decodeURIComponent]
+_S_a0_0x2cbd_04_if | 4S/1P | cc=1 | ⇐ a0_0x2cbd | cfg:this=a0_0x2cbd ; [void, 4S; side-effects]
+_S_program_declare_fn_l137 | 7S/0P | cc=2 | closure: a0_0x2cbd +18 obf ; module-init ; [void, 7S; side-effects]
