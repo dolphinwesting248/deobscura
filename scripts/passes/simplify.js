@@ -717,6 +717,21 @@ function normalizeSyntax(ast) {
   function walk(node) {
     if (!node || typeof node !== "object") return node;
 
+    // --- normalize: "string" == typeof x → typeof x === "string" ---
+    if (t.isBinaryExpression(node) && t.isStringLiteral(node.left) &&
+        t.isUnaryExpression(node.right) && node.right.operator === "typeof") {
+      const op = node.operator;
+      if (op === "==" || op === "===" || op === "!=" || op === "!==") {
+        count++;
+        const typeofNode = node.right;
+        const strNode = node.left;
+        node.left = typeofNode;
+        node.right = strNode;
+        if (op === "==") node.operator = "===";
+        if (op === "!=") node.operator = "!==";
+      }
+    }
+
     // Recurse
     for (const key of Object.keys(node)) {
       if (SKIP_KEYS.has(key)) continue;
