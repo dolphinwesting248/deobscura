@@ -736,14 +736,24 @@ function normalizeSyntax(ast) {
       }
 
       // --- Rule: multi-declaration → individual declarations ---
-      // let a, b, c → let a; let b; let c;  (same for var, const)
+      // Only split when at least one initializer is non-trivial (function call, expression, etc.)
+      // Trivial initializers (literals, identifiers, simple member access) stay merged
       if (t.isVariableDeclaration(s) && s.declarations.length >= 2) {
+        const hasNonTrivial = s.declarations.some((d) => {
+          if (!d.init) return false;
+          if (t.isFunctionExpression(d.init) || t.isArrowFunctionExpression(d.init)) return true;
+          if (t.isCallExpression(d.init) || t.isNewExpression(d.init)) return true;
+          if (t.isBinaryExpression(d.init) || t.isLogicalExpression(d.init)) return true;
+          if (t.isConditionalExpression(d.init)) return true;
+          return false;
+        });
+        if (!hasNonTrivial) continue;
         const newStmts = s.declarations.map((d) =>
           t.variableDeclaration(s.kind, [d]),
         );
         count += s.declarations.length - 1;
         stmtArray.splice(i, 1, ...newStmts);
-        i += newStmts.length - 1; // skip the ones we just inserted
+        i += newStmts.length - 1;
       }
     }
   }
