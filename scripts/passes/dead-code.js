@@ -2,6 +2,7 @@
 
 const { t } = require("../config");
 const { SKIP_KEYS } = require("../constants");
+const { clone } = require("../ast-utils");
 
 // ---- eliminateDeadCode: remove unreachable statements ----
 function eliminateDeadCode(ast) {
@@ -9,6 +10,7 @@ function eliminateDeadCode(ast) {
   let emptyCatchRemoved = 0;
   let falseBranchRemoved = 0;
   let trueBranchFlattened = 0;
+  let emptyBranchRemoved = 0;
 
   const replacements = [];
 
@@ -52,6 +54,27 @@ function eliminateDeadCode(ast) {
         const newStmts = s.block.body;
         replacements.push({ array: stmtArray, index: i, count: 1, stmts: newStmts });
       }
+
+      // --- if (x) {} [else { B }] → remove or keep else branch ---
+      if (t.isIfStatement(s) && t.isBlockStatement(s.consequent) && s.consequent.body.length === 0) {
+        if (s.alternate) {
+          emptyBranchRemoved++;
+          // if (!test) { alternate }
+          const newTest = t.unaryExpression("!", clone(s.test));
+          const newAlt = t.isBlockStatement(s.alternate) ? s.alternate : t.blockStatement([s.alternate]);
+          replacements.push({ array: stmtArray, index: i, count: 1, stmts: [t.ifStatement(newTest, newAlt)] });
+        } else {
+          emptyBranchRemoved++;
+          replacements.push({ array: stmtArray, index: i, count: 1, stmts: [] });
+        }
+      }
+      // --- if (x) { A } else {} → remove else ---
+      if (t.isIfStatement(s) && s.alternate && t.isBlockStatement(s.alternate) &&
+          s.alternate.body.length === 0 && !t.isIfStatement(s.consequent)) {
+        emptyBranchRemoved++;
+        const kept = t.isBlockStatement(s.consequent) ? s.consequent.body : [s.consequent];
+        replacements.push({ array: stmtArray, index: i, count: 1, stmts: kept });
+      }
     }
   }
 
@@ -71,11 +94,11 @@ function eliminateDeadCode(ast) {
 
   // Iterate until stable (one removal might expose another)
   for (let pass = 0; pass < 5; pass++) {
-    const before = unreachableRemoved + falseBranchRemoved + trueBranchFlattened + emptyCatchRemoved;
+    const before = unreachableRemoved + falseBranchRemoved + trueBranchFlattened + emptyCatchRemoved + emptyBranchRemoved;
     walkStmtLists(ast);
     replacements.reverse().forEach(({ array, index, count, stmts }) => array.splice(index, count, ...stmts));
     replacements.length = 0;
-    const after = unreachableRemoved + falseBranchRemoved + trueBranchFlattened + emptyCatchRemoved;
+    const after = unreachableRemoved + falseBranchRemoved + trueBranchFlattened + emptyCatchRemoved + emptyBranchRemoved;
     if (after === before) break;
   }
 
@@ -83,6 +106,7 @@ function eliminateDeadCode(ast) {
   console.log(`  Removed ${falseBranchRemoved} if(false) branches`);
   console.log(`  Flattened ${trueBranchFlattened} if(true) branches`);
   console.log(`  Removed ${emptyCatchRemoved} empty catch blocks`);
+  console.log(`  Removed ${emptyBranchRemoved} empty branch blocks`);
 }
 
 // ---- removeUnusedHelpers: delete function declarations that are never referenced ----
