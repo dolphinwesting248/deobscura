@@ -2,7 +2,6 @@
   "scenario": "A",
   "difficulty": "medium",
   "algorithm": "MD5",
-  "adaptationSource": "sina_ads.js + suning_da.js Signature alert patterns",
   "description": "MD5 request signing with hidden salt and separator. LLM must find the salt, separator, and parameter format to reproduce the signature.",
 
   "expectedAnswers": {

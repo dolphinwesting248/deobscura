@@ -1,0 +1,40 @@
+# main.js · Function Index · 13 functions
+_Previous: 1-structure.md  →  **Now: 2-index.txt**  →  Jump to main.js by function name._
+
+## Legend
+name | Ss/Pp | cc=N | → callees ⇐ callers | extras
+S=statements, P=params, cc=complexity, → calls, ⇐ called-by, root=entry
+closure:v = captures v, [tag] = semantic tag, FLAT=flattened, DATA=hex-data
+
+## entry
+a0_0x2c22 | cc=3 | → a0_0x522f, $11_if, $12_if, $13_else
+$16_fn | cc=2 | → $10_if
+$15_declare_fn | cc=2 | → $18_fn, $19_fn
+
+## trace
+a0_0x2c22 → a0_0x522f
+
+## shared
+_0x47fe44 ⇒ $15_declare_fn, _0x5c84de, _0x4f25e5, _0x29cb8b, _0x1aaf9e +4 · 9 fns · var
+_0x1849d1 ⇒ _0x5c84de, _0x4f25e5, _0x29cb8b, _0x1aaf9e, _0x1aeb10 +4 · 9 fns · var
+a0_0x2c22 ⇒ a0_0x2c22, $14_loop_body, $11_if, $12_if, $15_declare_fn · 5 fns · const
+a0_0x522f ⇒ a0_0x2c22, a0_0x522f · 2 fns · const, mut
+_0x77e496 ⇒ _0x17722a, _0xa7d1b5 · 2 fns · var
+_0xb05a6d ⇒ _0x17722a, _0xa7d1b5 · 2 fns · var
+
+## fn/core  (2) — Core Functions
+a0_0x2c22 | 9S/2P | cc=3 | → a0_0x522f, $11_if, $12_if, $13_else root | out=_0x1e7f3e ; [returns arg]
+a0_0x522f | 3S/0P | cc=1 | → a0_0x522f ⇐ a0_0x2c22, a0_0x522f | self-modifying table-init ; [calls → a0_0x522f]
+
+## fn/obfuscation  (11) — Obfuscation Artifacts
+$14_loop_body | 3S/2P | cc=4 | cb=_0x276961 ; [void, 3S; callback-driven]
+$16_fn | 4S/2P | cc=2 | → $10_if root | closure: a0_0x2c22, $10_if +1 obf ; [returns arg]
+$17_fn | 8S/1P | cc=8 | cfg:this=_0x3f76b7 ; [calls → decodeURIComponent]
+$10_if | 3S/1P | cc=1 | ⇐ $16_fn | [returns arg]
+$11_if | 4S/1P | cc=1 | ⇐ a0_0x2c22 | cfg:this=a0_0x2c22 ; [void, 4S; side-effects]
+$12_if | 7S/1P | cc=2 | ⇐ a0_0x2c22 | cfg:this=a0_0x2c22 ; [void, 7S; side-effects]
+$13_else | 1S/0P | cc=1 | ⇐ a0_0x2c22 | [void, 1S]
+$18_fn | 5S/17P | cc=2 | ⇐ $15_declare_fn | [returns arg]
+$19_fn | 1S/13P | cc=2 | ⇐ $15_declare_fn | [calls expr]
+$20_fn | 5S/1P | cc=1 | [void, 5S; side-effects]
+$15_declare_fn | 17S/0P | cc=2 | → $18_fn, $19_fn root | closure: $16_fn, $18_fn, a0_0x2c22 +17 obf ; [calls → $19_fn]

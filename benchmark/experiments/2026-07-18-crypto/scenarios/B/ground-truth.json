@@ -2,7 +2,6 @@
   "scenario": "B",
   "difficulty": "hard",
   "algorithm": "AES-128-CBC",
-  "adaptationSource": "weibo_fp.js We() function (lines 924-949)",
   "description": "AES-128-CBC encryption with hardcoded key and random IV. LLM must extract the key bytes, understand the IV+ciphertext format, and decrypt a provided payload.",
 
   "expectedAnswers": {

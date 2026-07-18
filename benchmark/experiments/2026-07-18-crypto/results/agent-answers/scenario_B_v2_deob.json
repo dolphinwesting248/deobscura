@@ -1,0 +1,14 @@
+{
+  "scenario": "B",
+  "agentType": "deob",
+  "algorithm": "XOR-CBC (simplified AES-128-CBC, PKCS7 padding, random IV)",
+  "keyHex": "2b7e151628aed2a6abf7158809cf4f3c",
+  "keySource": "Hardcoded 16-byte array _0xb05a6d in deob main.js",
+  "separator": ".",
+  "payloadFormat": "base64(IV) + '.' + base64(ciphertext)",
+  "entryFunction": "encryptPayload",
+  "pseudoCode": "def decrypt(payload): iv,ct=payload.split('.'); key=bytes.fromhex(...); ...",
+  "decryptedPlaintext": {"user":"test_user","action":"purchase","amount":99.99,"currency":"CNY"},
+  "endpoints": [],
+  "_meta": { "timeMs": 230517, "tokensUsed": 58000 }
+}

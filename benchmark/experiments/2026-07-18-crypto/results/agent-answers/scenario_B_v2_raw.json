@@ -1,0 +1,14 @@
+{
+  "scenario": "B",
+  "agentType": "raw",
+  "algorithm": "XOR-CBC (Custom XOR-based block cipher in CBC mode, PKCS7 padding)",
+  "keyHex": "2b7e151628aed2a6abf7158809cf4f3c",
+  "keySource": "Hardcoded byte array in obfuscated.js",
+  "separator": ".",
+  "payloadFormat": "base64(IV) + '.' + base64(ciphertext)",
+  "entryFunction": "decryptPayload",
+  "pseudoCode": "def decrypt(payload): iv,ct=payload.split('.'); ...",
+  "decryptedPlaintext": {"user":"test_user","action":"purchase","amount":99.99,"currency":"CNY"},
+  "endpoints": [],
+  "_meta": { "timeMs": 92182, "tokensUsed": 36000 }
+}

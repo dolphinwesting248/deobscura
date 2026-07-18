@@ -2,7 +2,6 @@
   "scenario": "C",
   "difficulty": "extreme",
   "algorithm": "RC4 + HMAC-SHA256",
-  "adaptationSource": "tmall_security.js a0_0x3411 string table + _S_l1_04_if_2 integrity check",
   "description": "RC4-encoded string table (20 strings) plus HMAC-SHA256 integrity verification. LLM must decode all RC4 strings, find the HMAC key, and verify a test HMAC.",
 
   "expectedAnswers": {
